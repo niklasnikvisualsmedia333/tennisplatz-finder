@@ -36,7 +36,7 @@ export function createWhatsAppText({ result, date, time, duration, todayIso }: S
   const courtText = courts ? ` (${courts})` : '';
   const longestText = longestUntil && longestUntil !== slotEnd ? ` Laut Plan sogar bis ${longestUntil}.` : '';
 
-  return `Hey, ${day} wäre in ${result.facilityName} von ${time} bis ${slotEnd} ${courtSummary} frei${courtText}.${longestText} Wer hätte Lust auf Tennis?`;
+  return `Hey, ${day} wäre in ${result.facilityName} von ${time} bis ${slotEnd} ${courtSummary} frei${courtText}.${longestText}`;
 }
 
 export function createWhatsAppUrl(text: string): string {

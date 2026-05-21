@@ -28,6 +28,7 @@ describe('share message', () => {
     expect(text).toContain('P2 und P3');
     expect(text).toContain('von 16:30 bis 17:30');
     expect(text).toContain('sogar bis 22:00');
+    expect(text).not.toContain('Wer hätte Lust');
   });
 
   it('creates an encoded WhatsApp URL', () => {

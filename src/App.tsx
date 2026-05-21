@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { courts, facilities, facilityIds, type CourtId, type FacilityId } from './data/facilities';
 import {
   analyzeAvailability,
@@ -13,13 +13,16 @@ import { addDays, formatDisplayDate, getDayKey, toIsoDate } from './lib/date';
 import { createWhatsAppText, createWhatsAppUrl } from './lib/share';
 
 type Scope = 'all' | FacilityId;
+type StepId = 1 | 2 | 3 | 4 | 5 | 6;
+type Duration = (typeof durations)[number];
 
 const times = Array.from({ length: 29 }, (_, index) => fromMinutes(toMinutes('08:00') + index * 30));
 const quickTimes = ['14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
 const durations = [60, 90, 120] as const;
+const storageKey = 'tennisplatz-finder-preferences';
 
 const baseNotice =
-  'Datenbasis: Trainingspläne plus manuell übertragene Termine. Kurzfristige Änderungen, private Buchungen, Wetter, Sperrungen und Verschiebungen bitte selbst prüfen.';
+  'Datenbasis: Trainingspläne plus manuell übertragene Termine. Kurzfristige Änderungen, private Buchungen, Wetter, Sperrungen und Verschiebungen bitte selbst prüfen. Vor allem bitte im Klubraum gegenprüfen, ob ein Event, Feiertag, Spieltag oder eine spontane Änderung eingetragen ist.';
 
 function cx(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(' ');
@@ -27,6 +30,44 @@ function cx(...classes: Array<string | false | null | undefined>): string {
 
 function scopeToFacilityIds(scope: Scope): FacilityId[] {
   return scope === 'all' ? facilityIds : [scope];
+}
+
+function isScope(value: unknown): value is Scope {
+  return value === 'all' || value === 'littfeld' || value === 'hilchenbach';
+}
+
+function isCourt(value: unknown): value is SelectedCourt {
+  return value === 'egal' || courts.includes(value as CourtId);
+}
+
+function isDuration(value: unknown): value is Duration {
+  return durations.includes(value as Duration);
+}
+
+function loadSavedPreferences(today: string) {
+  if (typeof window === 'undefined') {
+    return { scope: 'all' as Scope, date: today, time: '18:00', duration: 90 as Duration, selectedCourt: 'egal' as SelectedCourt };
+  }
+
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(storageKey) ?? '{}') as Partial<{
+      scope: Scope;
+      date: string;
+      time: string;
+      duration: Duration;
+      selectedCourt: SelectedCourt;
+    }>;
+
+    return {
+      scope: isScope(saved.scope) ? saved.scope : ('all' as Scope),
+      date: typeof saved.date === 'string' ? saved.date : today,
+      time: typeof saved.time === 'string' && times.includes(saved.time) ? saved.time : '18:00',
+      duration: isDuration(saved.duration) ? saved.duration : (90 as Duration),
+      selectedCourt: isCourt(saved.selectedCourt) ? saved.selectedCourt : ('egal' as SelectedCourt),
+    };
+  } catch {
+    return { scope: 'all' as Scope, date: today, time: '18:00', duration: 90 as Duration, selectedCourt: 'egal' as SelectedCourt };
+  }
 }
 
 function StepLabel({ number, children }: { number: number; children: string }) {
@@ -37,6 +78,39 @@ function StepLabel({ number, children }: { number: number; children: string }) {
       </span>
       {children}
     </div>
+  );
+}
+
+function CalendarIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M7 3v4M17 3v4M4 9h16M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" />
+    </svg>
+  );
+}
+
+function ClockIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M12 6v6l4 2" />
+      <circle cx="12" cy="12" r="9" />
+    </svg>
+  );
+}
+
+function BackIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="m15 18-6-6 6-6" />
+    </svg>
+  );
+}
+
+function MenuIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
   );
 }
 
@@ -237,12 +311,16 @@ function SharePanel({
 
 export default function App() {
   const today = useMemo(() => toIsoDate(new Date()), []);
-  const [scope, setScope] = useState<Scope>('all');
-  const [date, setDate] = useState(today);
-  const [time, setTime] = useState('18:00');
-  const [duration, setDuration] = useState<(typeof durations)[number]>(90);
-  const [selectedCourt, setSelectedCourt] = useState<SelectedCourt>('egal');
+  const savedPreferences = useMemo(() => loadSavedPreferences(today), [today]);
+  const [scope, setScope] = useState<Scope>(savedPreferences.scope);
+  const [date, setDate] = useState(savedPreferences.date);
+  const [time, setTime] = useState(savedPreferences.time);
+  const [duration, setDuration] = useState<Duration>(savedPreferences.duration);
+  const [selectedCourt, setSelectedCourt] = useState<SelectedCourt>(savedPreferences.selectedCourt);
+  const [currentStep, setCurrentStep] = useState<StepId>(1);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [copiedShareText, setCopiedShareText] = useState(false);
+  const dateInputRef = useRef<HTMLInputElement>(null);
 
   const selectedFacilityIds = scopeToFacilityIds(scope);
   const results = useMemo(
@@ -268,6 +346,35 @@ export default function App() {
   );
   const whatsAppUrl = useMemo(() => createWhatsAppUrl(shareMessage), [shareMessage]);
 
+  useEffect(() => {
+    window.localStorage.setItem(storageKey, JSON.stringify({ scope, date, time, duration, selectedCourt }));
+  }, [date, duration, scope, selectedCourt, time]);
+
+  function goToStep(step: StepId) {
+    setCurrentStep(step);
+    setMenuOpen(false);
+  }
+
+  function nextStep() {
+    setCurrentStep((step) => (Math.min(step + 1, 6) as StepId));
+    setMenuOpen(false);
+  }
+
+  function previousStep() {
+    setCurrentStep((step) => (Math.max(step - 1, 1) as StepId));
+    setMenuOpen(false);
+  }
+
+  function openDatePicker() {
+    const input = dateInputRef.current as (HTMLInputElement & { showPicker?: () => void }) | null;
+    input?.focus();
+    if (input?.showPicker) {
+      input.showPicker();
+      return;
+    }
+    input?.click();
+  }
+
   async function copyShareMessage() {
     const didCopy = await writeClipboardText(shareMessage);
 
@@ -280,6 +387,17 @@ export default function App() {
     alert(`Text konnte nicht automatisch kopiert werden:\n\n${shareMessage}`);
   }
 
+  const stepItems: Array<{ id: StepId; title: string; value: string }> = [
+    { id: 1, title: 'Anlage', value: scope === 'all' ? 'Beide Anlagen' : facilities[scope].name },
+    { id: 2, title: 'Datum', value: formatDisplayDate(date) },
+    { id: 3, title: 'Uhrzeit', value: time },
+    { id: 4, title: 'Dauer', value: `${duration} Min.` },
+    { id: 5, title: 'Platz', value: selectedCourt },
+    { id: 6, title: 'Ergebnis', value: best?.playable ? 'Slot frei' : 'Kein Slot' },
+  ];
+
+  const stepTitle = stepItems.find((step) => step.id === currentStep)?.title ?? 'Check';
+
   return (
     <main className="app-shell mx-auto flex min-h-screen w-full max-w-4xl flex-col lg:py-8">
       <header className="mb-5">
@@ -291,14 +409,65 @@ export default function App() {
               Schnell prüfen, ob Hilchenbach oder Littfeld frei ist.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={() => setMenuOpen((open) => !open)}
+            className="focus-ring grid h-12 w-12 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-court-lime"
+            aria-expanded={menuOpen}
+            aria-label="Schritte öffnen"
+          >
+            <MenuIcon />
+          </button>
         </div>
+        {menuOpen && (
+          <nav className="mt-4 grid gap-2 rounded-lg border border-white/10 bg-black/20 p-2">
+            {stepItems.map((step) => (
+              <button
+                key={step.id}
+                type="button"
+                onClick={() => goToStep(step.id)}
+                className={cx(
+                  'focus-ring flex min-h-11 items-center justify-between rounded-lg px-3 text-left text-sm',
+                  currentStep === step.id ? 'bg-court-lime text-court-950' : 'bg-white/[0.04] text-white',
+                )}
+              >
+                <span className="font-semibold">{step.title}</span>
+                <span className="text-xs opacity-80">{step.value}</span>
+              </button>
+            ))}
+          </nav>
+        )}
       </header>
 
       <section className="rounded-lg border border-court-lime/20 bg-court-900/80 p-4 shadow-lime sm:p-5">
-        <div className="space-y-6">
-          <div>
+        <div className="mb-5 flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={previousStep}
+            disabled={currentStep === 1}
+            className="focus-ring grid h-11 w-11 place-items-center rounded-lg border border-white/10 bg-white/[0.04] text-court-lime disabled:opacity-30"
+            aria-label="Zurück"
+          >
+            <BackIcon />
+          </button>
+          <div className="min-w-0 text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-court-muted">Schritt {Math.min(currentStep, 5)} von 5</p>
+            <h2 className="mt-1 text-xl font-bold text-white">{stepTitle}</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => goToStep(6)}
+            className="focus-ring min-h-11 rounded-lg border border-court-lime/30 px-3 text-xs font-bold text-court-lime"
+          >
+            Check
+          </button>
+        </div>
+
+        <div className="min-h-[22rem]">
+          {currentStep === 1 && (
+            <div>
             <StepLabel number={1}>Wo willst du prüfen?</StepLabel>
-            <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="mt-4 grid grid-cols-1 gap-3">
               <ChoiceButton active={scope === 'all'} onClick={() => setScope('all')}>
                 Beide Anlagen
               </ChoiceButton>
@@ -309,42 +478,53 @@ export default function App() {
                 Hilchenbach
               </ChoiceButton>
             </div>
+            <button type="button" onClick={nextStep} className="focus-ring mt-6 min-h-12 w-full rounded-lg bg-court-lime px-4 font-bold text-court-950">
+              Weiter zum Datum
+            </button>
           </div>
+          )}
 
-          <div>
+          {currentStep === 2 && (
+            <div>
             <StepLabel number={2}>Datum auswählen</StepLabel>
-            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-[auto_auto_1fr_auto_auto]">
+            <div className="mt-4 grid grid-cols-2 gap-2">
               <ChoiceButton compact active={date === today} onClick={() => setDate(today)}>
                 Heute
               </ChoiceButton>
               <ChoiceButton compact active={date === addDays(today, 1)} onClick={() => setDate(addDays(today, 1))}>
                 Morgen
               </ChoiceButton>
+            </div>
+            <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-3">
+              <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-court-lime" htmlFor="date-picker">
+                <CalendarIcon />
+                Kalender
+              </label>
               <input
+                id="date-picker"
+                ref={dateInputRef}
                 aria-label="Datum"
                 type="date"
                 value={date}
                 onChange={(event) => setDate(event.target.value)}
-                className="focus-ring col-span-2 min-h-11 rounded-lg border border-white/10 bg-black/20 px-3 text-sm text-white sm:col-span-1"
+                className="focus-ring min-h-14 w-full rounded-lg border border-court-lime/30 bg-court-950 px-4 text-lg font-bold text-white"
               />
               <button
                 type="button"
-                onClick={() => setDate(addDays(date, -1))}
-                className="focus-ring min-h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold"
+                onClick={openDatePicker}
+                className="focus-ring mt-3 min-h-12 w-full rounded-lg border border-court-lime/40 px-4 text-sm font-bold text-court-lime"
               >
-                Zurück
-              </button>
-              <button
-                type="button"
-                onClick={() => setDate(addDays(date, 1))}
-                className="focus-ring min-h-11 rounded-lg border border-white/10 bg-white/[0.04] px-3 text-sm font-semibold"
-              >
-                Weiter
+                Kalender öffnen
               </button>
             </div>
+            <button type="button" onClick={nextStep} className="focus-ring mt-6 min-h-12 w-full rounded-lg bg-court-lime px-4 font-bold text-court-950">
+              Weiter zur Uhrzeit
+            </button>
           </div>
+          )}
 
-          <div>
+          {currentStep === 3 && (
+            <div>
             <StepLabel number={3}>Uhrzeit auswählen</StepLabel>
             <div className="mt-3 grid grid-cols-4 gap-2">
               {quickTimes.map((quickTime) => (
@@ -353,11 +533,16 @@ export default function App() {
                 </ChoiceButton>
               ))}
             </div>
+            <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-court-lime" htmlFor="time-picker">
+              <ClockIcon />
+              Genaue Uhrzeit
+            </label>
             <select
+              id="time-picker"
               aria-label="Alle Uhrzeiten"
               value={time}
               onChange={(event) => setTime(event.target.value)}
-              className="focus-ring mt-2 min-h-11 w-full rounded-lg border border-white/10 bg-black/25 px-3 text-sm text-white"
+              className="focus-ring mt-2 min-h-14 w-full rounded-lg border border-court-lime/30 bg-court-950 px-4 text-lg font-bold text-white"
             >
               {times.map((slot) => (
                 <option key={slot} value={slot}>
@@ -365,36 +550,70 @@ export default function App() {
                 </option>
               ))}
             </select>
+            <button type="button" onClick={nextStep} className="focus-ring mt-6 min-h-12 w-full rounded-lg bg-court-lime px-4 font-bold text-court-950">
+              Weiter zur Dauer
+            </button>
           </div>
+          )}
 
-          <div className="grid gap-5 sm:grid-cols-2">
+          {currentStep === 4 && (
             <div>
               <StepLabel number={4}>Dauer</StepLabel>
-              <div className="mt-3 grid grid-cols-3 gap-2">
+              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 {durations.map((option) => (
-                  <ChoiceButton key={option} compact active={duration === option} onClick={() => setDuration(option)}>
+                  <ChoiceButton key={option} active={duration === option} onClick={() => setDuration(option)}>
                     {option} Min.
                   </ChoiceButton>
                 ))}
               </div>
+              <button type="button" onClick={nextStep} className="focus-ring mt-6 min-h-12 w-full rounded-lg bg-court-lime px-4 font-bold text-court-950">
+                Weiter zum Platz
+              </button>
             </div>
+          )}
+
+          {currentStep === 5 && (
             <div>
               <StepLabel number={5}>Platzfilter</StepLabel>
-              <div className="mt-3 grid grid-cols-4 gap-2">
-                <ChoiceButton compact active={selectedCourt === 'egal'} onClick={() => setSelectedCourt('egal')}>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <ChoiceButton active={selectedCourt === 'egal'} onClick={() => setSelectedCourt('egal')}>
                   egal
                 </ChoiceButton>
                 {courts.map((court) => (
-                  <ChoiceButton key={court} compact active={selectedCourt === court} onClick={() => setSelectedCourt(court)}>
+                  <ChoiceButton key={court} active={selectedCourt === court} onClick={() => setSelectedCourt(court)}>
                     {court}
                   </ChoiceButton>
                 ))}
               </div>
+              <button type="button" onClick={nextStep} className="focus-ring mt-6 min-h-12 w-full rounded-lg bg-court-lime px-4 font-bold text-court-950">
+                Ergebnis anzeigen
+              </button>
             </div>
-          </div>
+          )}
+
+          {currentStep === 6 && (
+            <div className="space-y-3">
+              <StepLabel number={5}>Zusammenfassung</StepLabel>
+              <div className="mt-4 grid gap-2">
+                {stepItems.slice(0, 5).map((step) => (
+                  <button
+                    key={step.id}
+                    type="button"
+                    onClick={() => goToStep(step.id)}
+                    className="focus-ring flex min-h-12 items-center justify-between rounded-lg border border-white/10 bg-black/20 px-3 text-left"
+                  >
+                    <span className="text-sm text-court-muted">{step.title}</span>
+                    <span className="text-sm font-bold text-white">{step.value}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </section>
 
+      {currentStep === 6 && (
+      <>
       <section aria-live="polite" className="mt-5 rounded-lg border border-white/10 bg-white/[0.05] p-5">
         <p className="text-sm text-court-muted">{formatDisplayDate(date)} · {time} · {duration} Min.</p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
@@ -487,6 +706,8 @@ export default function App() {
           </p>
         )}
       </footer>
+      </>
+      )}
     </main>
   );
 }
