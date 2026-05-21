@@ -19,6 +19,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  overflow-x: hidden;
   background:
     radial-gradient(circle at 50% -10%, rgba(215, 255, 114, 0.14), transparent 34rem),
     linear-gradient(180deg, #06170f 0%, #07130d 48%, #030806 100%);
@@ -32,6 +33,12 @@ select {
 
 button {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+input,
+select {
+  color-scheme: dark;
 }
 
 summary::-webkit-details-marker {
@@ -41,4 +48,18 @@ summary::-webkit-details-marker {
 .focus-ring:focus-visible {
   outline: 2px solid #d7ff72;
   outline-offset: 2px;
+}
+
+.app-shell {
+  padding-left: max(1rem, env(safe-area-inset-left));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-top: max(1.25rem, env(safe-area-inset-top));
+  padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+}
+
+@media (min-width: 640px) {
+  .app-shell {
+    padding-left: max(1.5rem, env(safe-area-inset-left));
+    padding-right: max(1.5rem, env(safe-area-inset-right));
+  }
 }

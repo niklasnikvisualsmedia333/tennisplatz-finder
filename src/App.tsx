@@ -215,7 +215,7 @@ async function shareResult() {
   }
 
   return (
-    <main className="mx-auto flex min-h-screen w-full max-w-4xl flex-col px-4 py-5 sm:px-6 lg:py-8">
+    <main className="app-shell mx-auto flex min-h-screen w-full max-w-4xl flex-col lg:py-8">
       <header className="mb-5">
         <p className="text-xs font-bold uppercase tracking-[0.28em] text-court-lime">Tennisplatz</p>
         <div className="mt-2 flex items-end justify-between gap-4">
@@ -235,7 +235,7 @@ async function shareResult() {
         </div>
       </header>
 
-      <section className="rounded-lg border border-court-lime/20 bg-court-900/70 p-4 shadow-lime backdrop-blur sm:p-5">
+      <section className="rounded-lg border border-court-lime/20 bg-court-900/80 p-4 shadow-lime sm:p-5">
         <div className="space-y-6">
           <div>
             <StepLabel number={1}>Wo willst du prüfen?</StepLabel>
@@ -336,7 +336,7 @@ async function shareResult() {
         </div>
       </section>
 
-      <section className="mt-5 rounded-lg border border-white/10 bg-white/[0.05] p-5">
+      <section aria-live="polite" className="mt-5 rounded-lg border border-white/10 bg-white/[0.05] p-5">
         <p className="text-sm text-court-muted">{formatDisplayDate(date)} · {time} · {duration} Min.</p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
           <div>

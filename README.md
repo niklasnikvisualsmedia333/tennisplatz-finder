@@ -17,6 +17,8 @@ npm install
 npm run dev
 ```
 
+Use Node.js 22 locally when possible. The GitHub Pages workflow also uses Node.js 22.
+
 ## Checks
 
 ```bash
