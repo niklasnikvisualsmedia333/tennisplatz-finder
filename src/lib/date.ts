@@ -26,3 +26,14 @@ export function formatDisplayDate(isoDate: string): string {
     month: '2-digit',
   }).format(new Date(`${isoDate}T12:00:00`));
 }
+
+export function formatRelativeDay(isoDate: string, todayIso = toIsoDate(new Date())): string {
+  if (isoDate === todayIso) return 'heute';
+  if (isoDate === addDays(todayIso, 1)) return 'morgen';
+
+  return new Intl.DateTimeFormat('de-DE', {
+    weekday: 'long',
+    day: '2-digit',
+    month: '2-digit',
+  }).format(new Date(`${isoDate}T12:00:00`));
+}

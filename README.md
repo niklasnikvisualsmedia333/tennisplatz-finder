@@ -2,6 +2,8 @@
 
 Mobile-first React app to quickly check whether Littfeld or Hilchenbach has a playable tennis slot for a selected date, time, duration, and optional court.
 
+After each check, the app generates a casual WhatsApp-ready message with the day, facility, time window, and free courts. Users can open WhatsApp directly or copy the text.
+
 ## Data Basis
 
 - Hilchenbach uses the PDF training plan data available to me. The filename referenced 2026, while the content said Sommer 2025.

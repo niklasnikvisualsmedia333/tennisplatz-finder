@@ -10,6 +10,7 @@ import {
   type SelectedCourt,
 } from './lib/availability';
 import { addDays, formatDisplayDate, getDayKey, toIsoDate } from './lib/date';
+import { createWhatsAppText, createWhatsAppUrl } from './lib/share';
 
 type Scope = 'all' | FacilityId;
 
@@ -163,6 +164,77 @@ function Details({ title, children }: { title: string; children: React.ReactNode
   );
 }
 
+async function writeClipboardText(text: string): Promise<boolean> {
+  const nav = navigator as Navigator & {
+    clipboard?: Clipboard;
+  };
+
+  try {
+    if (nav.clipboard?.writeText) {
+      await nav.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // Fall through to the textarea fallback for browsers with stricter permissions.
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', 'true');
+  textarea.style.position = 'fixed';
+  textarea.style.left = '-9999px';
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    return document.execCommand('copy');
+  } finally {
+    document.body.removeChild(textarea);
+  }
+}
+
+function SharePanel({
+  message,
+  whatsAppUrl,
+  onCopy,
+  copied,
+}: {
+  message: string;
+  whatsAppUrl: string;
+  onCopy: () => void;
+  copied: boolean;
+}) {
+  return (
+    <div className="mt-5 rounded-lg border border-court-lime/20 bg-court-lime/[0.07] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold text-white">WhatsApp-Nachricht</p>
+          <p className="mt-1 text-xs text-court-muted">Kurz, locker und direkt zum Weiterleiten.</p>
+        </div>
+        {copied && <span className="rounded-full bg-court-lime px-2 py-1 text-xs font-bold text-court-950">kopiert</span>}
+      </div>
+      <p className="mt-3 rounded-lg border border-white/10 bg-black/20 p-3 text-sm leading-relaxed text-white">{message}</p>
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        <a
+          href={whatsAppUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="focus-ring grid min-h-11 place-items-center rounded-lg bg-court-lime px-4 text-sm font-bold text-court-950"
+        >
+          In WhatsApp öffnen
+        </a>
+        <button
+          type="button"
+          onClick={onCopy}
+          className="focus-ring min-h-11 rounded-lg border border-court-lime/40 px-4 text-sm font-semibold text-court-lime"
+        >
+          Text kopieren
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const today = useMemo(() => toIsoDate(new Date()), []);
   const [scope, setScope] = useState<Scope>('all');
@@ -170,6 +242,7 @@ export default function App() {
   const [time, setTime] = useState('18:00');
   const [duration, setDuration] = useState<(typeof durations)[number]>(90);
   const [selectedCourt, setSelectedCourt] = useState<SelectedCourt>('egal');
+  const [copiedShareText, setCopiedShareText] = useState(false);
 
   const selectedFacilityIds = scopeToFacilityIds(scope);
   const results = useMemo(
@@ -189,29 +262,22 @@ export default function App() {
     selectedCourt,
   ]);
   const hasUncertainBooking = results.some((result) => result.hasUncertainBooking);
+  const shareMessage = useMemo(
+    () => createWhatsAppText({ result: best, date, time, duration, todayIso: today }),
+    [best, date, duration, time, today],
+  );
+  const whatsAppUrl = useMemo(() => createWhatsAppUrl(shareMessage), [shareMessage]);
 
-async function shareResult() {
-    const text = [
-      `Tennisplatz Finder: ${best?.playable ? 'Slot frei' : 'Kein voller Slot'}`,
-      best ? `Beste Option: ${best.facilityName}` : '',
-      `${formatDisplayDate(date)} um ${time}, ${duration} Min.`,
-      `Plätze: ${best?.playableCourts.join(', ') || 'keine'}`,
-    ]
-      .filter(Boolean)
-      .join('\n');
+  async function copyShareMessage() {
+    const didCopy = await writeClipboardText(shareMessage);
 
-    const nav = navigator as Navigator & {
-      share?: (data: ShareData) => Promise<void>;
-      clipboard?: Clipboard;
-    };
-
-    if (nav.share) {
-      await nav.share({ title: 'Tennisplatz Finder', text });
+    if (didCopy) {
+      setCopiedShareText(true);
+      window.setTimeout(() => setCopiedShareText(false), 1800);
       return;
     }
 
-    await nav.clipboard?.writeText(text);
-    alert(`Text wurde kopiert:\n\n${text}`);
+    alert(`Text konnte nicht automatisch kopiert werden:\n\n${shareMessage}`);
   }
 
   return (
@@ -225,13 +291,6 @@ async function shareResult() {
               Schnell prüfen, ob Hilchenbach oder Littfeld frei ist.
             </p>
           </div>
-          <button
-            type="button"
-            onClick={shareResult}
-            className="focus-ring hidden min-h-11 rounded-lg border border-court-lime/40 px-4 text-sm font-semibold text-court-lime sm:block"
-          >
-            Teilen
-          </button>
         </div>
       </header>
 
@@ -349,14 +408,8 @@ async function shareResult() {
               </p>
             )}
           </div>
-          <button
-            type="button"
-            onClick={shareResult}
-            className="focus-ring min-h-11 rounded-lg border border-court-lime/40 px-4 text-sm font-semibold text-court-lime sm:hidden"
-          >
-            Teilen
-          </button>
         </div>
+        <SharePanel message={shareMessage} whatsAppUrl={whatsAppUrl} onCopy={copyShareMessage} copied={copiedShareText} />
       </section>
 
       <section className="mt-4 grid gap-3">
