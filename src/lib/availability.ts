@@ -184,3 +184,38 @@ export function getNextSlots(
 
   return slots.slice(0, 8);
 }
+
+export function getNextSlotsInWindow(
+  scope: FacilityId[] | 'all',
+  date: string,
+  earliestTime: string,
+  latestStartTime: string,
+  duration: number,
+): Slot[] {
+  const ids = scope === 'all' ? facilityIds : scope;
+  const slots: Slot[] = [];
+  const earliest = toMinutes(earliestTime);
+  const latest = Math.max(earliest, toMinutes(latestStartTime));
+
+  for (let dayOffset = 0; dayOffset < 8 && slots.length < 8; dayOffset += 1) {
+    const slotDate = addDays(date, dayOffset);
+    for (let minutes = earliest; minutes <= latest && minutes + duration <= toMinutes('22:00'); minutes += 30) {
+      const time = fromMinutes(minutes);
+      ids.forEach((facilityId) => {
+        const result = analyzeAvailability(facilityId, slotDate, getDayKey(slotDate), time, duration, 'egal');
+        if (result.playable) {
+          slots.push({
+            facilityId,
+            facilityName: result.facilityName,
+            date: slotDate,
+            time,
+            courts: result.playableCourts,
+          });
+        }
+      });
+      if (slots.length >= 8) break;
+    }
+  }
+
+  return slots.slice(0, 8);
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeAvailability, fromMinutes, overlaps, toMinutes } from './availability';
+import { analyzeAvailability, fromMinutes, getNextSlotsInWindow, overlaps, toMinutes } from './availability';
 import { getDayKey } from './date';
 
 describe('availability logic', () => {
@@ -59,5 +59,15 @@ describe('availability logic', () => {
   it('allows Hilchenbach Friday 16:00 for 90 minutes', () => {
     const result = analyzeAvailability('hilchenbach', '2026-05-29', getDayKey('2026-05-29'), '16:00', 90, 'egal');
     expect(result.playable).toBe(true);
+  });
+
+  it('finds next slots inside a preferred time window', () => {
+    const slots = getNextSlotsInWindow(['hilchenbach'], '2026-05-29', '16:00', '19:00', 90);
+
+    expect(slots[0]).toMatchObject({
+      facilityId: 'hilchenbach',
+      date: '2026-05-29',
+      time: '16:00',
+    });
   });
 });

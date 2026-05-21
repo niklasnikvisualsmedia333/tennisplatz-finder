@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { courts, facilities, facilityIds, type CourtId, type FacilityId } from './data/facilities';
+import { courts, facilities, facilityIds, type Booking, type CourtId, type FacilityId } from './data/facilities';
 import {
   analyzeAvailability,
   fromMinutes,
-  getNextSlots,
+  getBookingsForDate,
+  getNextSlotsInWindow,
   rankResults,
   toMinutes,
   type AvailabilityResult,
-  type SelectedCourt,
 } from './lib/availability';
 import { addDays, formatDisplayDate, getDayKey, toIsoDate } from './lib/date';
 import { createWhatsAppText, createWhatsAppUrl } from './lib/share';
 
 type Scope = 'all' | FacilityId;
-type StepId = 1 | 2 | 3 | 4 | 5 | 6;
+type StepId = 1 | 2 | 3 | 4 | 5;
 type Duration = (typeof durations)[number];
 
 const times = Array.from({ length: 29 }, (_, index) => fromMinutes(toMinutes('08:00') + index * 30));
@@ -36,17 +36,13 @@ function isScope(value: unknown): value is Scope {
   return value === 'all' || value === 'littfeld' || value === 'hilchenbach';
 }
 
-function isCourt(value: unknown): value is SelectedCourt {
-  return value === 'egal' || courts.includes(value as CourtId);
-}
-
 function isDuration(value: unknown): value is Duration {
   return durations.includes(value as Duration);
 }
 
 function loadSavedPreferences(today: string) {
   if (typeof window === 'undefined') {
-    return { scope: 'all' as Scope, date: today, time: '18:00', duration: 90 as Duration, selectedCourt: 'egal' as SelectedCourt };
+    return { scope: 'all' as Scope, date: today, time: '18:00', latestTime: '19:00', duration: 90 as Duration };
   }
 
   try {
@@ -54,19 +50,19 @@ function loadSavedPreferences(today: string) {
       scope: Scope;
       date: string;
       time: string;
+      latestTime: string;
       duration: Duration;
-      selectedCourt: SelectedCourt;
     }>;
 
     return {
       scope: isScope(saved.scope) ? saved.scope : ('all' as Scope),
       date: typeof saved.date === 'string' ? saved.date : today,
       time: typeof saved.time === 'string' && times.includes(saved.time) ? saved.time : '18:00',
+      latestTime: typeof saved.latestTime === 'string' && times.includes(saved.latestTime) ? saved.latestTime : '19:00',
       duration: isDuration(saved.duration) ? saved.duration : (90 as Duration),
-      selectedCourt: isCourt(saved.selectedCourt) ? saved.selectedCourt : ('egal' as SelectedCourt),
     };
   } catch {
-    return { scope: 'all' as Scope, date: today, time: '18:00', duration: 90 as Duration, selectedCourt: 'egal' as SelectedCourt };
+    return { scope: 'all' as Scope, date: today, time: '18:00', latestTime: '19:00', duration: 90 as Duration };
   }
 }
 
@@ -110,6 +106,15 @@ function MenuIcon() {
   return (
     <svg aria-hidden="true" viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth="2">
       <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  );
+}
+
+function ExternalIcon() {
+  return (
+    <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="2">
+      <path d="M14 3h7v7M21 3l-9 9" />
+      <path d="M5 7v12h12" />
     </svg>
   );
 }
@@ -309,14 +314,55 @@ function SharePanel({
   );
 }
 
+function isWeekend(isoDate: string): boolean {
+  const day = new Date(`${isoDate}T12:00:00`).getDay();
+  return day === 0 || day === 6;
+}
+
+function bookingForCourt(booking: Booking, court: CourtId): boolean {
+  return booking.courts.includes(court);
+}
+
+function DayPlan({ facilityId, date }: { facilityId: FacilityId; date: string }) {
+  const bookings = getBookingsForDate(facilityId, date, getDayKey(date));
+
+  return (
+    <div className="rounded-lg border border-white/10 bg-black/20 p-3">
+      <h3 className="text-base font-semibold text-white">{facilities[facilityId].name}</h3>
+      <div className="mt-3 grid grid-cols-3 gap-2">
+        {courts.map((court) => {
+          const courtBookings = bookings.filter((booking) => bookingForCourt(booking, court));
+          return (
+            <div key={court} className="min-w-0 rounded-lg border border-white/10 bg-court-950/70 p-2">
+              <p className="text-center text-sm font-bold text-court-lime">{court}</p>
+              <div className="mt-2 space-y-2">
+                {courtBookings.length === 0 ? (
+                  <p className="rounded-md bg-court-lime/10 p-2 text-center text-xs text-court-lime">frei laut Plan</p>
+                ) : (
+                  courtBookings.map((booking) => (
+                    <div key={booking.id} className="rounded-md bg-rose-300/10 p-2 text-xs leading-snug text-rose-50">
+                      <p className="font-bold">{booking.start}-{booking.end}</p>
+                      <p className="mt-1 break-words text-rose-100/85">{booking.title}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const today = useMemo(() => toIsoDate(new Date()), []);
   const savedPreferences = useMemo(() => loadSavedPreferences(today), [today]);
   const [scope, setScope] = useState<Scope>(savedPreferences.scope);
   const [date, setDate] = useState(savedPreferences.date);
   const [time, setTime] = useState(savedPreferences.time);
+  const [latestTime, setLatestTime] = useState(savedPreferences.latestTime);
   const [duration, setDuration] = useState<Duration>(savedPreferences.duration);
-  const [selectedCourt, setSelectedCourt] = useState<SelectedCourt>(savedPreferences.selectedCourt);
   const [currentStep, setCurrentStep] = useState<StepId>(1);
   const [menuOpen, setMenuOpen] = useState(false);
   const [copiedShareText, setCopiedShareText] = useState(false);
@@ -327,17 +373,18 @@ export default function App() {
     () =>
       rankResults(
         selectedFacilityIds.map((facilityId) =>
-          analyzeAvailability(facilityId, date, getDayKey(date), time, duration, selectedCourt),
+          analyzeAvailability(facilityId, date, getDayKey(date), time, duration, 'egal'),
         ),
       ),
-    [date, duration, scope, selectedCourt, time],
+    [date, duration, scope, time],
   );
   const best = results[0];
-  const nextSlots = useMemo(() => getNextSlots(scope === 'all' ? 'all' : [scope], date, duration, selectedCourt), [
+  const nextSlots = useMemo(() => getNextSlotsInWindow(scope === 'all' ? 'all' : [scope], date, time, latestTime, duration), [
     date,
     duration,
+    latestTime,
     scope,
-    selectedCourt,
+    time,
   ]);
   const hasUncertainBooking = results.some((result) => result.hasUncertainBooking);
   const shareMessage = useMemo(
@@ -347,8 +394,8 @@ export default function App() {
   const whatsAppUrl = useMemo(() => createWhatsAppUrl(shareMessage), [shareMessage]);
 
   useEffect(() => {
-    window.localStorage.setItem(storageKey, JSON.stringify({ scope, date, time, duration, selectedCourt }));
-  }, [date, duration, scope, selectedCourt, time]);
+    window.localStorage.setItem(storageKey, JSON.stringify({ scope, date, time, latestTime, duration }));
+  }, [date, duration, latestTime, scope, time]);
 
   function goToStep(step: StepId) {
     setCurrentStep(step);
@@ -356,7 +403,7 @@ export default function App() {
   }
 
   function nextStep() {
-    setCurrentStep((step) => (Math.min(step + 1, 6) as StepId));
+    setCurrentStep((step) => (Math.min(step + 1, 5) as StepId));
     setMenuOpen(false);
   }
 
@@ -375,6 +422,29 @@ export default function App() {
     input?.click();
   }
 
+  function updateEarliestTime(nextTime: string) {
+    setTime(nextTime);
+    if (toMinutes(latestTime) < toMinutes(nextTime)) {
+      setLatestTime(nextTime);
+    }
+  }
+
+  function checkTodayLater() {
+    const now = new Date();
+    const rounded = Math.ceil((now.getHours() * 60 + now.getMinutes()) / 30) * 30;
+    const next = Math.min(Math.max(rounded, toMinutes('08:00')), toMinutes('21:00'));
+    const nextTime = fromMinutes(next);
+    setDate(today);
+    updateEarliestTime(nextTime);
+    setLatestTime(fromMinutes(Math.min(next + 180, toMinutes('21:00'))));
+    goToStep(3);
+  }
+
+  function checkTomorrow() {
+    setDate(addDays(today, 1));
+    goToStep(2);
+  }
+
   async function copyShareMessage() {
     const didCopy = await writeClipboardText(shareMessage);
 
@@ -390,13 +460,12 @@ export default function App() {
   const stepItems: Array<{ id: StepId; title: string; value: string }> = [
     { id: 1, title: 'Anlage', value: scope === 'all' ? 'Beide Anlagen' : facilities[scope].name },
     { id: 2, title: 'Datum', value: formatDisplayDate(date) },
-    { id: 3, title: 'Uhrzeit', value: time },
+    { id: 3, title: 'Zeitraum', value: `${time}-${latestTime}` },
     { id: 4, title: 'Dauer', value: `${duration} Min.` },
-    { id: 5, title: 'Platz', value: selectedCourt },
-    { id: 6, title: 'Ergebnis', value: best?.playable ? 'Slot frei' : 'Kein Slot' },
+    { id: 5, title: 'Ergebnis', value: best?.playable ? 'Slot frei' : 'Kein Slot' },
   ];
 
-  const stepTitle = stepItems.find((step) => step.id === currentStep)?.title ?? 'Check';
+  const stepTitle = stepItems.find((step) => step.id === currentStep)?.title ?? 'Ergebnis';
 
   return (
     <main className="app-shell mx-auto flex min-h-screen w-full max-w-4xl flex-col lg:py-8">
@@ -440,7 +509,7 @@ export default function App() {
       </header>
 
       <section className="rounded-lg border border-court-lime/20 bg-court-900/80 p-4 shadow-lime sm:p-5">
-        <div className="mb-5 flex items-center justify-between gap-3">
+        <div className="mb-5 flex items-center gap-3">
           <button
             type="button"
             onClick={previousStep}
@@ -451,16 +520,9 @@ export default function App() {
             <BackIcon />
           </button>
           <div className="min-w-0 text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-court-muted">Schritt {Math.min(currentStep, 5)} von 5</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-court-muted">Schritt {currentStep} von 5</p>
             <h2 className="mt-1 text-xl font-bold text-white">{stepTitle}</h2>
           </div>
-          <button
-            type="button"
-            onClick={() => goToStep(6)}
-            className="focus-ring min-h-11 rounded-lg border border-court-lime/30 px-3 text-xs font-bold text-court-lime"
-          >
-            Check
-          </button>
         </div>
 
         <div className="min-h-[22rem]">
@@ -496,19 +558,28 @@ export default function App() {
               </ChoiceButton>
             </div>
             <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-3">
-              <label className="mb-2 flex items-center gap-2 text-sm font-semibold text-court-lime" htmlFor="date-picker">
+              <p className="mb-2 flex items-center gap-2 text-sm font-semibold text-court-lime">
                 <CalendarIcon />
                 Kalender
-              </label>
-              <input
-                id="date-picker"
-                ref={dateInputRef}
-                aria-label="Datum"
-                type="date"
-                value={date}
-                onChange={(event) => setDate(event.target.value)}
-                className="focus-ring min-h-14 w-full rounded-lg border border-court-lime/30 bg-court-950 px-4 text-lg font-bold text-white"
-              />
+              </p>
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={openDatePicker}
+                  className="focus-ring flex min-h-14 w-full items-center justify-center rounded-lg border border-court-lime/30 bg-court-950 px-3 text-lg font-bold text-white"
+                >
+                  {formatDisplayDate(date)}
+                </button>
+                <input
+                  id="date-picker"
+                  ref={dateInputRef}
+                  aria-label="Datum"
+                  type="date"
+                  value={date}
+                  onChange={(event) => setDate(event.target.value)}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </div>
               <button
                 type="button"
                 onClick={openDatePicker}
@@ -526,30 +597,50 @@ export default function App() {
           {currentStep === 3 && (
             <div>
             <StepLabel number={3}>Uhrzeit auswählen</StepLabel>
+            <p className="mt-2 text-sm leading-relaxed text-court-muted">
+              Wenn du flexibel bist, setz einfach einen Zeitraum. Die nächsten freien Zeiten werden danach sortiert.
+            </p>
             <div className="mt-3 grid grid-cols-4 gap-2">
               {quickTimes.map((quickTime) => (
-                <ChoiceButton key={quickTime} compact active={time === quickTime} onClick={() => setTime(quickTime)}>
+                <ChoiceButton key={quickTime} compact active={time === quickTime} onClick={() => updateEarliestTime(quickTime)}>
                   {quickTime}
                 </ChoiceButton>
               ))}
             </div>
-            <label className="mt-4 flex items-center gap-2 text-sm font-semibold text-court-lime" htmlFor="time-picker">
-              <ClockIcon />
-              Genaue Uhrzeit
-            </label>
-            <select
-              id="time-picker"
-              aria-label="Alle Uhrzeiten"
-              value={time}
-              onChange={(event) => setTime(event.target.value)}
-              className="focus-ring mt-2 min-h-14 w-full rounded-lg border border-court-lime/30 bg-court-950 px-4 text-lg font-bold text-white"
-            >
-              {times.map((slot) => (
-                <option key={slot} value={slot}>
-                  {slot}
-                </option>
-              ))}
-            </select>
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="block text-sm font-semibold text-court-lime" htmlFor="time-picker">
+                <span className="mb-2 flex items-center gap-2"><ClockIcon />Frühestens</span>
+                <select
+                  id="time-picker"
+                  aria-label="Früheste Uhrzeit"
+                  value={time}
+                  onChange={(event) => updateEarliestTime(event.target.value)}
+                  className="focus-ring min-h-14 w-full rounded-lg border border-court-lime/30 bg-court-950 px-4 text-lg font-bold text-white"
+                >
+                  {times.map((slot) => (
+                    <option key={slot} value={slot}>
+                      {slot}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="block text-sm font-semibold text-court-lime" htmlFor="latest-time-picker">
+                <span className="mb-2 flex items-center gap-2"><ClockIcon />Spätester Start</span>
+                <select
+                  id="latest-time-picker"
+                  aria-label="Späteste Startzeit"
+                  value={latestTime}
+                  onChange={(event) => setLatestTime(event.target.value)}
+                  className="focus-ring min-h-14 w-full rounded-lg border border-court-lime/30 bg-court-950 px-4 text-lg font-bold text-white"
+                >
+                  {times.map((slot) => (
+                    <option key={slot} value={slot}>
+                      {slot}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
             <button type="button" onClick={nextStep} className="focus-ring mt-6 min-h-12 w-full rounded-lg bg-court-lime px-4 font-bold text-court-950">
               Weiter zur Dauer
             </button>
@@ -567,35 +658,16 @@ export default function App() {
                 ))}
               </div>
               <button type="button" onClick={nextStep} className="focus-ring mt-6 min-h-12 w-full rounded-lg bg-court-lime px-4 font-bold text-court-950">
-                Weiter zum Platz
-              </button>
-            </div>
-          )}
-
-          {currentStep === 5 && (
-            <div>
-              <StepLabel number={5}>Platzfilter</StepLabel>
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <ChoiceButton active={selectedCourt === 'egal'} onClick={() => setSelectedCourt('egal')}>
-                  egal
-                </ChoiceButton>
-                {courts.map((court) => (
-                  <ChoiceButton key={court} active={selectedCourt === court} onClick={() => setSelectedCourt(court)}>
-                    {court}
-                  </ChoiceButton>
-                ))}
-              </div>
-              <button type="button" onClick={nextStep} className="focus-ring mt-6 min-h-12 w-full rounded-lg bg-court-lime px-4 font-bold text-court-950">
                 Ergebnis anzeigen
               </button>
             </div>
           )}
 
-          {currentStep === 6 && (
+          {currentStep === 5 && (
             <div className="space-y-3">
               <StepLabel number={5}>Zusammenfassung</StepLabel>
               <div className="mt-4 grid gap-2">
-                {stepItems.slice(0, 5).map((step) => (
+                {stepItems.slice(0, 4).map((step) => (
                   <button
                     key={step.id}
                     type="button"
@@ -612,7 +684,7 @@ export default function App() {
         </div>
       </section>
 
-      {currentStep === 6 && (
+      {currentStep === 5 && (
       <>
       <section aria-live="polite" className="mt-5 rounded-lg border border-white/10 bg-white/[0.05] p-5">
         <p className="text-sm text-court-muted">{formatDisplayDate(date)} · {time} · {duration} Min.</p>
@@ -629,6 +701,29 @@ export default function App() {
           </div>
         </div>
         <SharePanel message={shareMessage} whatsAppUrl={whatsAppUrl} onCopy={copyShareMessage} copied={copiedShareText} />
+        <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+          <button
+            type="button"
+            onClick={() => goToStep(3)}
+            className="focus-ring min-h-11 rounded-lg border border-court-lime/40 px-4 text-sm font-semibold text-court-lime"
+          >
+            Neue Uhrzeit checken
+          </button>
+          <button
+            type="button"
+            onClick={checkTodayLater}
+            className="focus-ring min-h-11 rounded-lg border border-white/10 bg-white/[0.04] px-4 text-sm font-semibold text-white"
+          >
+            Heute später
+          </button>
+          <button
+            type="button"
+            onClick={checkTomorrow}
+            className="focus-ring min-h-11 rounded-lg border border-white/10 bg-white/[0.04] px-4 text-sm font-semibold text-white"
+          >
+            Morgen checken
+          </button>
+        </div>
       </section>
 
       <section className="mt-4 grid gap-3">
@@ -660,9 +755,9 @@ export default function App() {
           </div>
         </Details>
 
-        <Details title="Nächste freie Zeiten anzeigen">
+        <Details title="Nächste freie Zeiten im Zeitraum anzeigen">
           {nextSlots.length === 0 ? (
-            <p>Keine freien Zeiten in den nächsten Tagen gefunden.</p>
+            <p>Keine freien Zeiten im gewählten Zeitraum in den nächsten Tagen gefunden.</p>
           ) : (
             <ul className="space-y-2">
               {nextSlots.map((slot) => (
@@ -674,26 +769,30 @@ export default function App() {
           )}
         </Details>
 
-        <Details title="Tagesübersicht anzeigen">
-          <div className="grid gap-3">
-            {results.map((result) => (
-              <div key={result.facilityId}>
-                <h3 className="font-semibold text-white">{result.facilityName}</h3>
-                <div className="mt-2 grid grid-cols-3 gap-2">
-                  {result.courtResults.map((court) => (
-                    <div key={court.court} className="rounded-lg bg-black/20 p-3 text-xs">
-                      <p className="font-semibold text-white">{court.court}</p>
-                      <p className="mt-1">{court.free ? `frei bis ${fromMinutes(court.freeUntil)}` : 'aktuell belegt'}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
+        <Details title="Tagesplan anzeigen">
+          <div className="space-y-3">
+            {selectedFacilityIds.map((facilityId) => (
+              <DayPlan key={facilityId} facilityId={facilityId} date={date} />
             ))}
           </div>
         </Details>
       </section>
 
       <footer className="mt-5 space-y-2 pb-6 text-xs leading-relaxed text-court-muted">
+        <p className="rounded-lg border border-amber-200/20 bg-amber-200/10 p-3 text-amber-100">
+          Wochenenden, Feiertage und ausfallendes Training werden nicht automatisch erkannt. Bitte vor dem Losfahren nochmal gegenprüfen.
+        </p>
+        {selectedFacilityIds.includes('littfeld') && (
+          <a
+            href="https://klubraum.com/"
+            target="_blank"
+            rel="noreferrer"
+            className="focus-ring flex min-h-11 items-center justify-center gap-2 rounded-lg border border-court-lime/40 bg-court-lime/10 px-4 text-sm font-bold text-court-lime"
+          >
+            Klubraum für Littfeld öffnen
+            <ExternalIcon />
+          </a>
+        )}
         <p className="rounded-lg border border-white/10 bg-black/20 p-3">{baseNotice}</p>
         {results.map((result) => (
           <p key={result.facilityId} className="rounded-lg border border-white/10 bg-black/20 p-3">

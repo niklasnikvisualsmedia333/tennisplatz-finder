@@ -26,7 +26,7 @@ export function createWhatsAppText({ result, date, time, duration, todayIso }: S
   const day = formatRelativeDay(date, todayIso);
 
   if (!result || !result.playable) {
-    return `Hey, ich hab gerade geschaut: ${day} ab ${time} ist leider kein voller ${duration}-Minuten-Slot frei.`;
+    return `Ich hab gerade geschaut: ${day} ab ${time} ist leider kein voller ${duration}-Minuten-Slot frei.`;
   }
 
   const slotEnd = fromMinutes(toMinutes(time) + duration);
@@ -36,7 +36,7 @@ export function createWhatsAppText({ result, date, time, duration, todayIso }: S
   const courtText = courts ? ` (${courts})` : '';
   const longestText = longestUntil && longestUntil !== slotEnd ? ` Laut Plan sogar bis ${longestUntil}.` : '';
 
-  return `Hey, ${day} wäre in ${result.facilityName} von ${time} bis ${slotEnd} ${courtSummary} frei${courtText}.${longestText}`;
+  return `${day} wäre in ${result.facilityName} von ${time} bis ${slotEnd} ${courtSummary} frei${courtText}.${longestText}`;
 }
 
 export function createWhatsAppUrl(text: string): string {
