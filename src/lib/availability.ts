@@ -195,17 +195,17 @@ export function getNextSlotsInWindow(
   scope: FacilityId[] | 'all',
   date: string,
   earliestTime: string,
-  latestStartTime: string,
+  latestEndTime: string,
   duration: number,
 ): Slot[] {
   const ids = scope === 'all' ? facilityIds : scope;
   const slots: Slot[] = [];
   const earliest = toMinutes(earliestTime);
-  const latest = Math.max(earliest, toMinutes(latestStartTime));
+  const latestStart = toMinutes(latestEndTime) - duration;
 
   for (let dayOffset = 0; dayOffset < 8 && slots.length < 8; dayOffset += 1) {
     const slotDate = addDays(date, dayOffset);
-    for (let minutes = earliest; minutes <= latest && minutes + duration <= toMinutes('22:00'); minutes += 30) {
+    for (let minutes = earliest; minutes <= latestStart && minutes + duration <= toMinutes('22:00'); minutes += 30) {
       const time = fromMinutes(minutes);
       ids.forEach((facilityId) => {
         const result = analyzeAvailability(facilityId, slotDate, getDayKey(slotDate), time, duration, 'egal');

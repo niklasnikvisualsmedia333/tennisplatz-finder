@@ -41,9 +41,13 @@ function isDuration(value: unknown): value is Duration {
   return durations.includes(value as Duration);
 }
 
+function slotEnd(time: string, duration: number): string {
+  return fromMinutes(Math.min(toMinutes(time) + duration, toMinutes('22:00')));
+}
+
 function loadSavedPreferences(today: string) {
   if (typeof window === 'undefined') {
-    return { scope: 'all' as Scope, date: today, time: '18:00', latestTime: '19:00', duration: 90 as Duration };
+    return { scope: 'all' as Scope, date: today, time: '18:00', latestTime: '22:00', duration: 90 as Duration };
   }
 
   try {
@@ -59,11 +63,11 @@ function loadSavedPreferences(today: string) {
       scope: isScope(saved.scope) ? saved.scope : ('all' as Scope),
       date: typeof saved.date === 'string' ? saved.date : today,
       time: typeof saved.time === 'string' && times.includes(saved.time) ? saved.time : '18:00',
-      latestTime: typeof saved.latestTime === 'string' && times.includes(saved.latestTime) ? saved.latestTime : '19:00',
+      latestTime: typeof saved.latestTime === 'string' && times.includes(saved.latestTime) ? saved.latestTime : '22:00',
       duration: isDuration(saved.duration) ? saved.duration : (90 as Duration),
     };
   } catch {
-    return { scope: 'all' as Scope, date: today, time: '18:00', latestTime: '19:00', duration: 90 as Duration };
+    return { scope: 'all' as Scope, date: today, time: '18:00', latestTime: '22:00', duration: 90 as Duration };
   }
 }
 
@@ -315,6 +319,53 @@ function SharePanel({
   );
 }
 
+function RecommendationCard({
+  slot,
+  duration,
+  selectedDate,
+  hasSameDaySlot,
+  onApply,
+}: {
+  slot?: ReturnType<typeof getNextSlotsInWindow>[number];
+  duration: number;
+  selectedDate: string;
+  hasSameDaySlot: boolean;
+  onApply: (slot: ReturnType<typeof getNextSlotsInWindow>[number]) => void;
+}) {
+  if (!slot) {
+    return (
+      <div className="mt-4 rounded-lg border border-amber-200/20 bg-amber-200/10 p-4 text-sm text-amber-100">
+        Im gewählten Zeitfenster ist kein voller Slot hinterlegt. Versuch ein größeres Fenster oder einen anderen Tag.
+      </div>
+    );
+  }
+
+  const end = slotEnd(slot.time, duration);
+  const dateLabel = slot.date === selectedDate ? 'An diesem Tag' : formatDisplayDate(slot.date);
+
+  return (
+    <div className="mt-4 rounded-lg border border-court-lime/30 bg-court-lime/[0.08] p-4">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-court-lime">Empfehlung</p>
+      {!hasSameDaySlot && (
+        <p className="mt-2 rounded-md border border-amber-200/20 bg-amber-200/10 p-2 text-xs leading-relaxed text-amber-100">
+          An diesem Tag wurde im gewählten Fenster kein freier Slot gefunden. Das ist die nächste hinterlegte Option.
+        </p>
+      )}
+      <p className="mt-2 text-sm leading-relaxed text-white">
+        {dateLabel}: <span className="font-bold">{slot.facilityName}</span> ab{' '}
+        <span className="font-bold">{slot.time}</span> bis {end}, {slot.courts.map((court) => `P${court}`).join(', ')} frei.
+      </p>
+      <button
+        type="button"
+        onClick={() => onApply(slot)}
+        className="focus-ring mt-3 min-h-11 w-full rounded-lg bg-court-lime px-4 text-sm font-bold text-court-950"
+      >
+        Diese Zeit übernehmen
+      </button>
+    </div>
+  );
+}
+
 function isWeekend(isoDate: string): boolean {
   const day = new Date(`${isoDate}T12:00:00`).getDay();
   return day === 0 || day === 6;
@@ -351,6 +402,8 @@ export default function App() {
     scope,
     time,
   ]);
+  const sameDayRecommendation = nextSlots.find((slot) => slot.date === date);
+  const firstRecommendation = sameDayRecommendation ?? nextSlots[0];
   const hasAssumedBooking = results.some((result) => result.hasAssumedBooking);
   const shareMessage = useMemo(
     () => createWhatsAppText({ result: best, date, time, duration, todayIso: today }),
@@ -361,6 +414,13 @@ export default function App() {
   useEffect(() => {
     window.localStorage.setItem(storageKey, JSON.stringify({ scope, date, time, latestTime, duration }));
   }, [date, duration, latestTime, scope, time]);
+
+  useEffect(() => {
+    const minimumEnd = Math.min(toMinutes(time) + duration, toMinutes('22:00'));
+    if (toMinutes(latestTime) < minimumEnd) {
+      setLatestTime(fromMinutes(minimumEnd));
+    }
+  }, [duration, latestTime, time]);
 
   function goToStep(step: StepId) {
     setCurrentStep(step);
@@ -389,8 +449,9 @@ export default function App() {
 
   function updateEarliestTime(nextTime: string) {
     setTime(nextTime);
-    if (toMinutes(latestTime) < toMinutes(nextTime)) {
-      setLatestTime(nextTime);
+    const minimumEnd = Math.min(toMinutes(nextTime) + duration, toMinutes('22:00'));
+    if (toMinutes(latestTime) < minimumEnd) {
+      setLatestTime(fromMinutes(minimumEnd));
     }
   }
 
@@ -401,7 +462,7 @@ export default function App() {
     const nextTime = fromMinutes(next);
     setDate(today);
     updateEarliestTime(nextTime);
-    setLatestTime(fromMinutes(Math.min(next + 180, toMinutes('21:00'))));
+    setLatestTime('22:00');
     goToStep(3);
   }
 
@@ -420,6 +481,16 @@ export default function App() {
     }
 
     alert(`Text konnte nicht automatisch kopiert werden:\n\n${shareMessage}`);
+  }
+
+  function applyRecommendedSlot(slot: NonNullable<typeof firstRecommendation>) {
+    setDate(slot.date);
+    setTime(slot.time);
+    setLatestTime(slotEnd(slot.time, duration));
+    if (scope === 'all') {
+      setScope(slot.facilityId);
+    }
+    goToStep(5);
   }
 
   const stepItems: Array<{ id: StepId; title: string; value: string }> = [
@@ -563,7 +634,7 @@ export default function App() {
             <div>
             <StepLabel number={3}>Uhrzeit auswählen</StepLabel>
             <p className="mt-2 text-sm leading-relaxed text-court-muted">
-              Wenn du flexibel bist, setz einfach einen Zeitraum. Die nächsten freien Zeiten werden danach sortiert.
+              Wähle den frühesten Start und bis wann du spätestens fertig sein möchtest. Offen nach hinten: einfach 22:00 lassen.
             </p>
             <div className="mt-3 grid grid-cols-4 gap-2">
               {quickTimes.map((quickTime) => (
@@ -590,19 +661,21 @@ export default function App() {
                 </select>
               </label>
               <label className="block text-sm font-semibold text-court-lime" htmlFor="latest-time-picker">
-                <span className="mb-2 flex items-center gap-2"><ClockIcon />Spätester Start</span>
+                <span className="mb-2 flex items-center gap-2"><ClockIcon />Bis spätestens fertig</span>
                 <select
                   id="latest-time-picker"
-                  aria-label="Späteste Startzeit"
+                  aria-label="Spätestens fertig bis"
                   value={latestTime}
                   onChange={(event) => setLatestTime(event.target.value)}
                   className="focus-ring min-h-14 w-full rounded-lg border border-court-lime/30 bg-court-950 px-4 text-lg font-bold text-white"
                 >
-                  {times.map((slot) => (
-                    <option key={slot} value={slot}>
-                      {slot}
-                    </option>
-                  ))}
+                  {times
+                    .filter((slot) => toMinutes(slot) >= Math.min(toMinutes(time) + duration, toMinutes('22:00')))
+                    .map((slot) => (
+                      <option key={slot} value={slot}>
+                        {slot}
+                      </option>
+                    ))}
                 </select>
               </label>
             </div>
@@ -651,20 +724,44 @@ export default function App() {
 
       {currentStep === 5 && (
       <>
-      <section aria-live="polite" className="mt-5 rounded-lg border border-white/10 bg-white/[0.05] p-5">
-        <p className="text-sm text-court-muted">{formatDisplayDate(date)} · {time} · {duration} Min.</p>
+      <section
+        aria-live="polite"
+        className={cx(
+          'mt-5 rounded-lg border p-5',
+          best?.playable
+            ? 'border-court-lime/25 bg-white/[0.05]'
+            : 'border-rose-300/40 bg-rose-500/[0.10] shadow-[0_0_28px_rgba(251,113,133,0.12)]',
+        )}
+      >
+        <p className={cx('text-sm', best?.playable ? 'text-court-muted' : 'font-semibold text-rose-100')}>
+          Gewählter Slot: {formatDisplayDate(date)} · {time}-{slotEnd(time, duration)} · {duration} Min.
+        </p>
         <div className="mt-2 flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className={cx('text-3xl font-black', best?.playable ? 'text-court-lime' : 'text-rose-100')}>
-              {best?.playable ? 'Slot frei' : 'Kein Slot'}
+              {best?.playable ? 'Slot frei' : 'Kein freier Slot'}
             </h2>
-            {best && (
+            {best?.playable && (
               <p className="mt-1 text-sm text-court-muted">
                 Beste Option: <span className="font-semibold text-white">{best.facilityName}</span>
               </p>
             )}
+            {!best?.playable && (
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-rose-100/90">
+                Für diese Startzeit ist kein voller Slot frei. Nimm direkt die Empfehlung unten oder ändere den Zeitraum.
+              </p>
+            )}
           </div>
         </div>
+        {!best?.playable && (
+          <RecommendationCard
+            slot={firstRecommendation}
+            duration={duration}
+            selectedDate={date}
+            hasSameDaySlot={Boolean(sameDayRecommendation)}
+            onApply={applyRecommendedSlot}
+          />
+        )}
         <SharePanel message={shareMessage} whatsAppUrl={whatsAppUrl} onCopy={copyShareMessage} copied={copiedShareText} />
         <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
           <button

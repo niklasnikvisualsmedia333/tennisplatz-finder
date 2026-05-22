@@ -157,6 +157,12 @@ describe('availability logic', () => {
     });
   });
 
+  it('treats the second window time as latest finish, not latest start', () => {
+    const slots = getNextSlotsInWindow(['hilchenbach'], '2026-05-29', '18:00', '19:00', 90);
+
+    expect(slots.some((slot) => slot.date === '2026-05-29' && slot.time === '18:00')).toBe(false);
+  });
+
   it('keeps all booking data complete and free of old PDF source labels', () => {
     const allBookings = facilityIds.flatMap((facilityId) => {
       const facility = facilities[facilityId];
