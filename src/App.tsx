@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { courts, facilities, facilityIds, type Booking, type CourtId, type FacilityId } from './data/facilities';
+import { facilities, facilityIds, type CourtId, type FacilityId } from './data/facilities';
+import { DayCalendarView } from './components/DayCalendarView';
+import { SourceDocuments } from './components/SourceDocuments';
 import {
   analyzeAvailability,
   fromMinutes,
-  getBookingsForDate,
   getNextSlotsInWindow,
   rankResults,
   toMinutes,
@@ -14,15 +15,15 @@ import { createWhatsAppText, createWhatsAppUrl } from './lib/share';
 
 type Scope = 'all' | FacilityId;
 type StepId = 1 | 2 | 3 | 4 | 5;
+const durations = [60, 90, 120] as const;
 type Duration = (typeof durations)[number];
 
 const times = Array.from({ length: 29 }, (_, index) => fromMinutes(toMinutes('08:00') + index * 30));
 const quickTimes = ['14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'];
-const durations = [60, 90, 120] as const;
 const storageKey = 'tennisplatz-finder-preferences';
 
 const baseNotice =
-  'Datenbasis: Trainingspläne plus manuell übertragene Termine. Kurzfristige Änderungen, private Buchungen, Wetter, Sperrungen und Verschiebungen bitte selbst prüfen. Vor allem bitte im Klubraum gegenprüfen, ob ein Event, Feiertag, Spieltag oder eine spontane Änderung eingetragen ist.';
+  'Datenbasis: Trainingsplan-Bilder plus manuell übertragene Termine. Kurzfristige Änderungen, private Buchungen, Wetter, Sperrungen und Verschiebungen bitte selbst prüfen.';
 
 function cx(...classes: Array<string | false | null | undefined>): string {
   return classes.filter(Boolean).join(' ');
@@ -166,7 +167,7 @@ function CourtButton({
           result.free ? 'border-court-lime/45 bg-court-lime/10' : 'border-rose-300/30 bg-rose-400/10',
         )}
       >
-        <span className="font-semibold">{result.court}</span>
+        <span className="font-semibold">P{result.court}</span>
         <span className={cx('text-xs font-semibold', result.free ? 'text-court-lime' : 'text-rose-200')}>
           {result.free ? 'frei' : 'belegt'}
         </span>
@@ -192,7 +193,7 @@ function FacilityCard({ result }: { result: AvailabilityResult }) {
             {result.invalid
               ? 'Kein voller Slot'
               : result.playable
-                ? `${result.playableCourts.join(', ')} frei`
+                ? `${result.playableCourts.map((court) => `P${court}`).join(', ')} frei`
                 : 'Alle passenden Plätze belegt'}
           </p>
         </div>
@@ -223,7 +224,7 @@ function FacilityCard({ result }: { result: AvailabilityResult }) {
         <p className="mt-4 text-sm text-court-muted">
           Längster Lauf:{' '}
           <span className="font-semibold text-white">
-            {result.longestRun.court} bis {result.longestRun.until}
+            P{result.longestRun.court} bis {result.longestRun.until}
           </span>
         </p>
       )}
@@ -233,7 +234,7 @@ function FacilityCard({ result }: { result: AvailabilityResult }) {
 
 function Details({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <details className="rounded-lg border border-white/10 bg-white/[0.035] p-4">
+    <details className="min-w-0 rounded-lg border border-white/10 bg-white/[0.035] p-4">
       <summary className="focus-ring flex cursor-pointer list-none items-center justify-between rounded-md text-sm font-semibold">
         {title}
         <span className="text-court-lime">+</span>
@@ -319,42 +320,6 @@ function isWeekend(isoDate: string): boolean {
   return day === 0 || day === 6;
 }
 
-function bookingForCourt(booking: Booking, court: CourtId): boolean {
-  return booking.courts.includes(court);
-}
-
-function DayPlan({ facilityId, date }: { facilityId: FacilityId; date: string }) {
-  const bookings = getBookingsForDate(facilityId, date, getDayKey(date));
-
-  return (
-    <div className="rounded-lg border border-white/10 bg-black/20 p-3">
-      <h3 className="text-base font-semibold text-white">{facilities[facilityId].name}</h3>
-      <div className="mt-3 grid grid-cols-3 gap-2">
-        {courts.map((court) => {
-          const courtBookings = bookings.filter((booking) => bookingForCourt(booking, court));
-          return (
-            <div key={court} className="min-w-0 rounded-lg border border-white/10 bg-court-950/70 p-2">
-              <p className="text-center text-sm font-bold text-court-lime">{court}</p>
-              <div className="mt-2 space-y-2">
-                {courtBookings.length === 0 ? (
-                  <p className="rounded-md bg-court-lime/10 p-2 text-center text-xs text-court-lime">frei laut Plan</p>
-                ) : (
-                  courtBookings.map((booking) => (
-                    <div key={booking.id} className="rounded-md bg-rose-300/10 p-2 text-xs leading-snug text-rose-50">
-                      <p className="font-bold">{booking.start}-{booking.end}</p>
-                      <p className="mt-1 break-words text-rose-100/85">{booking.title}</p>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 export default function App() {
   const today = useMemo(() => toIsoDate(new Date()), []);
   const savedPreferences = useMemo(() => loadSavedPreferences(today), [today]);
@@ -386,7 +351,7 @@ export default function App() {
     scope,
     time,
   ]);
-  const hasUncertainBooking = results.some((result) => result.hasUncertainBooking);
+  const hasAssumedBooking = results.some((result) => result.hasAssumedBooking);
   const shareMessage = useMemo(
     () => createWhatsAppText({ result: best, date, time, duration, todayIso: today }),
     [best, date, duration, time, today],
@@ -744,8 +709,10 @@ export default function App() {
                   <ul className="mt-2 space-y-2">
                     {result.bookings.map((booking) => (
                       <li key={booking.id} className="rounded-lg bg-black/20 p-3">
-                        <span className="font-semibold text-white">{booking.start}-{booking.end}</span> · {booking.courts.join(', ')} · {booking.title}
-                        {booking.certainty === 'uncertain' && <span className="text-amber-100"> · angenommen</span>}
+                        <span className="font-semibold text-white">{booking.start}-{booking.end}</span> · {booking.courts.map((court) => `P${court}`).join(', ')} · {booking.title}
+                        {(booking.certainty === 'assumed-one-court' || booking.certainty === 'assumed-all-courts' || booking.certainty === 'needs-check') && (
+                          <span className="text-amber-100"> · angenommen</span>
+                        )}
                       </li>
                     ))}
                   </ul>
@@ -762,7 +729,7 @@ export default function App() {
             <ul className="space-y-2">
               {nextSlots.map((slot) => (
                 <li key={`${slot.facilityId}-${slot.date}-${slot.time}`} className="rounded-lg bg-black/20 p-3">
-                  <span className="font-semibold text-white">{slot.facilityName}</span> · {formatDisplayDate(slot.date)} · {slot.time} · {slot.courts.join(', ')}
+                  <span className="font-semibold text-white">{slot.facilityName}</span> · {formatDisplayDate(slot.date)} · {slot.time} · {slot.courts.map((court) => `P${court}`).join(', ')}
                 </li>
               ))}
             </ul>
@@ -772,10 +739,12 @@ export default function App() {
         <Details title="Tagesplan anzeigen">
           <div className="space-y-3">
             {selectedFacilityIds.map((facilityId) => (
-              <DayPlan key={facilityId} facilityId={facilityId} date={date} />
+              <DayCalendarView key={facilityId} facilityId={facilityId} date={date} />
             ))}
           </div>
         </Details>
+
+        <SourceDocuments />
       </section>
 
       <footer className="mt-5 space-y-2 pb-6 text-xs leading-relaxed text-court-muted">
@@ -799,9 +768,14 @@ export default function App() {
             {facilities[result.facilityId].notice}
           </p>
         ))}
-        {hasUncertainBooking && (
+        {selectedFacilityIds.includes('hilchenbach') && (
           <p className="rounded-lg border border-amber-200/20 bg-amber-200/10 p-3 text-amber-100">
-            Mindestens ein Termin hat eine angenommene Platzanzahl. Bitte in der Team-App prüfen.
+            Hinweis: Im Hilchenbach-Bild steht Sommer 2025, es wird hier aber als Trainingsplan 2026 geführt.
+          </p>
+        )}
+        {hasAssumedBooking && (
+          <p className="rounded-lg border border-amber-200/20 bg-amber-200/10 p-3 text-amber-100">
+            Für diesen Tag gibt es angenommene Platzbelegungen. Bitte gegenprüfen.
           </p>
         )}
       </footer>

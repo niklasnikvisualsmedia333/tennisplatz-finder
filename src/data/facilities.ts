@@ -1,18 +1,29 @@
 import type { DayKey } from '../lib/date';
+import { littfeldDatedEvents, littfeldRecurringEvents } from './littfeld-extra-events';
 
-export type CourtId = 'P1' | 'P2' | 'P3';
-export type FacilityId = 'littfeld' | 'hilchenbach';
-export type Certainty = 'high' | 'uncertain';
+export type FacilityId = 'hilchenbach' | 'littfeld';
+export type Court = 1 | 2 | 3;
+export type CourtId = Court;
+
+export type BookingSource = 'training-plan-image' | 'screenshot' | 'screenshot-series' | 'manual';
+export type Certainty = 'high' | 'assumed-one-court' | 'assumed-all-courts' | 'needs-check';
 
 export type Booking = {
   id: string;
+  facilityId: FacilityId;
   title: string;
+  date?: string;
+  recurring?: {
+    day: DayKey;
+    startDate?: string;
+    endDate?: string;
+  };
   start: string;
   end: string;
-  courts: CourtId[];
+  courts: Court[];
+  source: BookingSource;
   certainty: Certainty;
-  source: 'pdf' | 'screenshot';
-  note?: string;
+  notes?: string;
 };
 
 type WeeklyBookings = Partial<Record<DayKey, Booking[]>>;
@@ -23,119 +34,109 @@ export type Facility = {
   planHours: Partial<Record<DayKey, { start: string; end: string }>>;
   weeklyBookings: WeeklyBookings;
   suspendedWeeklyDates?: string[];
-  datedBookings?: Record<string, Booking[]>;
-  recurringBookings?: Array<Booking & { from: string; to: string; dayKey: DayKey }>;
+  datedBookings?: Booking[];
+  recurringBookings?: Booking[];
   notice: string;
 };
 
-const ALL_COURTS: CourtId[] = ['P1', 'P2', 'P3'];
+const allCourts: Court[] = [1, 2, 3];
+
+function trainingBooking(
+  id: string,
+  facilityId: FacilityId,
+  title: string,
+  start: string,
+  end: string,
+  courts: Court[],
+): Booking {
+  return {
+    id,
+    facilityId,
+    title,
+    start,
+    end,
+    courts,
+    source: 'training-plan-image',
+    certainty: 'high',
+  };
+}
 
 export const facilities: Record<FacilityId, Facility> = {
   hilchenbach: {
     id: 'hilchenbach',
     name: 'Hilchenbach',
     planHours: {
-      monday: { start: '15:00', end: '21:00' },
-      tuesday: { start: '15:00', end: '21:00' },
-      wednesday: { start: '15:00', end: '21:00' },
-      thursday: { start: '15:00', end: '21:00' },
-      friday: { start: '15:00', end: '21:00' },
+      mo: { start: '15:00', end: '21:00' },
+      di: { start: '15:00', end: '21:00' },
+      mi: { start: '15:00', end: '21:00' },
+      do: { start: '15:00', end: '21:00' },
+      fr: { start: '15:00', end: '21:00' },
     },
     weeklyBookings: {
-      monday: [
-        { id: 'h-mo-jugend', title: 'Jugend-Training M. Köppe', start: '15:00', end: '18:00', courts: ['P1'], certainty: 'high', source: 'pdf' },
-        { id: 'h-mo-herren', title: 'Herren-Training H. Liebe', start: '18:00', end: '19:30', courts: ['P1'], certainty: 'high', source: 'pdf' },
+      mo: [
+        trainingBooking('hilchenbach-mo-jugend-koeppe', 'hilchenbach', 'Jugend-Training M. Köppe', '15:00', '18:00', [1]),
+        trainingBooking('hilchenbach-mo-herren-liebe', 'hilchenbach', 'Herren-Training H. Liebe', '18:00', '19:30', [1]),
       ],
-      tuesday: [
-        { id: 'h-tu-damen', title: 'Damen', start: '18:00', end: '20:00', courts: ['P2', 'P3'], certainty: 'high', source: 'pdf' },
-      ],
-      wednesday: [
-        { id: 'h-we-herren', title: 'Herren', start: '18:00', end: '20:00', courts: ['P1', 'P2'], certainty: 'high', source: 'pdf' },
-      ],
-      thursday: [
-        { id: 'h-th-mixed', title: 'Mixed', start: '18:00', end: '20:00', courts: ['P1', 'P2'], certainty: 'high', source: 'pdf' },
-      ],
+      di: [trainingBooking('hilchenbach-di-damen', 'hilchenbach', 'Damen', '18:00', '19:30', [2, 3])],
+      mi: [trainingBooking('hilchenbach-mi-herren', 'hilchenbach', 'Herren', '18:00', '19:30', [1, 2])],
+      do: [trainingBooking('hilchenbach-do-mixed', 'hilchenbach', 'Mixed', '18:00', '19:30', [1, 2])],
     },
-    notice: 'Für Hilchenbach sind nur die PDF-Trainingszeiten hinterlegt. Zusätzliche Events oder Spieltage bitte selbst prüfen.',
+    notice: 'Hilchenbach: Trainingsplan-Bild 2026 hinterlegt. Zusätzliche Events bitte prüfen.',
   },
   littfeld: {
     id: 'littfeld',
     name: 'Littfeld',
     planHours: {
-      monday: { start: '14:00', end: '21:00' },
-      tuesday: { start: '14:00', end: '21:00' },
-      wednesday: { start: '14:00', end: '21:00' },
-      thursday: { start: '14:00', end: '21:00' },
-      friday: { start: '14:00', end: '21:00' },
-      saturday: { start: '09:00', end: '13:00' },
+      mo: { start: '14:00', end: '21:00' },
+      di: { start: '14:00', end: '21:00' },
+      mi: { start: '14:00', end: '21:00' },
+      do: { start: '14:00', end: '21:00' },
+      fr: { start: '14:00', end: '21:00' },
+      sa: { start: '09:00', end: '13:00' },
     },
     weeklyBookings: {
-      monday: [
-        { id: 'l-mo-chiara', title: 'Chiara Trainingsgruppen Kinder', start: '14:00', end: '17:00', courts: ['P1'], certainty: 'high', source: 'pdf' },
-        { id: 'l-mo-arno', title: 'Arno Trainingsgruppen', start: '15:00', end: '18:30', courts: ['P3'], certainty: 'high', source: 'pdf' },
-        { id: 'l-mo-damen-1', title: 'Damen 1 & 2 Training bei Chiara', start: '17:00', end: '19:30', courts: ['P1', 'P2'], certainty: 'high', source: 'pdf' },
-        { id: 'l-mo-damen30', title: 'Damen 30', start: '18:30', end: '20:00', courts: ['P3'], certainty: 'high', source: 'pdf' },
-        { id: 'l-mo-damen-2', title: 'Damen 1 & 2', start: '19:30', end: '20:30', courts: ['P1', 'P2'], certainty: 'high', source: 'pdf' },
+      mo: [
+        trainingBooking('littfeld-mo-chiara-kinder', 'littfeld', 'Chiara Trainingsgruppen Kinder', '14:00', '17:00', [1]),
+        trainingBooking('littfeld-mo-arno', 'littfeld', 'Arno Trainingsgruppen', '15:00', '18:30', [3]),
+        trainingBooking('littfeld-mo-damen12-chiara', 'littfeld', 'Damen 1 & 2 Training bei Chiara', '17:00', '19:30', [1, 2]),
+        trainingBooking('littfeld-mo-damen30', 'littfeld', 'Damen 30', '18:30', '20:00', [3]),
+        trainingBooking('littfeld-mo-damen12', 'littfeld', 'Damen 1 & 2', '19:30', '20:30', [1, 2]),
       ],
-      tuesday: [
-        { id: 'l-tu-chiara', title: 'Chiara Trainingsgruppen Kinder', start: '14:00', end: '18:00', courts: ['P1'], certainty: 'high', source: 'pdf' },
-        { id: 'l-tu-sonja', title: 'Sonja Trainingsgruppen Kinder', start: '14:00', end: '18:00', courts: ['P3'], certainty: 'high', source: 'pdf' },
-        { id: 'l-tu-jule', title: 'Chiara / Jule mit Jürgen Bree', start: '18:00', end: '19:30', courts: ['P3'], certainty: 'high', source: 'pdf' },
-        { id: 'l-tu-damen40-a', title: 'Damen 40 mit Jürgen Bree', start: '19:00', end: '20:30', courts: ['P1', 'P2'], certainty: 'high', source: 'pdf' },
-        { id: 'l-tu-damen40-b', title: 'Damen 40 mit Jürgen Bree', start: '19:30', end: '20:30', courts: ['P3'], certainty: 'high', source: 'pdf' },
+      di: [
+        trainingBooking('littfeld-di-chiara-kinder', 'littfeld', 'Chiara Trainingsgruppen Kinder', '14:00', '18:00', [1]),
+        trainingBooking('littfeld-di-sonja-kinder', 'littfeld', 'Sonja Trainingsgruppen Kinder', '14:00', '18:00', [3]),
+        trainingBooking('littfeld-di-chiara-jule-bree', 'littfeld', 'Chiara / Jule mit Jürgen Bree', '18:00', '19:30', [3]),
+        trainingBooking('littfeld-di-damen40-bree-p12', 'littfeld', 'Damen 40 mit Jürgen Bree', '19:00', '20:30', [1, 2]),
+        trainingBooking('littfeld-di-damen40-bree-p3', 'littfeld', 'Damen 40 mit Jürgen Bree', '19:30', '20:30', [3]),
       ],
-      wednesday: [
-        { id: 'l-we-chiara', title: 'Chiara Trainingsgruppen Kinder', start: '15:00', end: '18:30', courts: ['P1'], certainty: 'high', source: 'pdf' },
-        { id: 'l-we-michael', title: 'Michael Trainingsgruppen Kinder', start: '15:00', end: '18:00', courts: ['P3'], certainty: 'high', source: 'pdf' },
-        { id: 'l-we-herren-a', title: 'Herren 1 + 2, Herren 30, Herren 50', start: '18:00', end: '20:30', courts: ['P2', 'P3'], certainty: 'high', source: 'pdf' },
-        { id: 'l-we-herren-b', title: 'Herren 1 + 2, Herren 30, Herren 50', start: '18:30', end: '20:30', courts: ['P1'], certainty: 'high', source: 'pdf' },
+      mi: [
+        trainingBooking('littfeld-mi-chiara-kinder', 'littfeld', 'Chiara Trainingsgruppen Kinder', '15:00', '18:30', [1]),
+        trainingBooking('littfeld-mi-michael-kinder', 'littfeld', 'Michael Trainingsgruppen Kinder', '15:00', '18:00', [3]),
+        trainingBooking('littfeld-mi-herren-p23', 'littfeld', 'Herren 1 + 2, Herren 30, Herren 50', '18:00', '20:30', [2, 3]),
+        trainingBooking('littfeld-mi-herren-p1', 'littfeld', 'Herren 1 + 2, Herren 30, Herren 50', '18:30', '20:30', [1]),
       ],
-      thursday: [
-        { id: 'l-th-sonja', title: 'Sonja Trainingsgruppen Kinder', start: '15:00', end: '18:30', courts: ['P3'], certainty: 'high', source: 'pdf' },
-        { id: 'l-th-chiara', title: 'Chiara Trainingsgruppen Kinder', start: '16:00', end: '19:00', courts: ['P1'], certainty: 'high', source: 'pdf' },
-        { id: 'l-th-damen12', title: 'Damen 1 + 2', start: '18:00', end: '21:00', courts: ['P2'], certainty: 'high', source: 'pdf' },
-        { id: 'l-th-damen30', title: 'Damen 30', start: '18:30', end: '20:30', courts: ['P3'], certainty: 'high', source: 'pdf' },
-        { id: 'l-th-damen40', title: 'Damen 40', start: '19:00', end: '21:00', courts: ['P1'], certainty: 'high', source: 'pdf' },
+      do: [
+        trainingBooking('littfeld-do-sonja-kinder', 'littfeld', 'Sonja Trainingsgruppen Kinder', '15:00', '18:30', [3]),
+        trainingBooking('littfeld-do-chiara-kinder', 'littfeld', 'Chiara Trainingsgruppen Kinder', '16:00', '19:00', [1]),
+        trainingBooking('littfeld-do-damen12', 'littfeld', 'Damen 1 + 2', '18:00', '21:00', [2]),
+        trainingBooking('littfeld-do-damen30', 'littfeld', 'Damen 30', '18:30', '20:30', [3]),
+        trainingBooking('littfeld-do-damen40', 'littfeld', 'Damen 40', '19:00', '20:30', [1]),
       ],
-      friday: [
-        { id: 'l-fr-herren70', title: 'Herren 70', start: '15:00', end: '17:00', courts: ['P1'], certainty: 'high', source: 'pdf' },
-        { id: 'l-fr-herren', title: 'Herren 1 + 2, Herren 30, Herren 50', start: '17:00', end: '20:00', courts: ALL_COURTS, certainty: 'high', source: 'pdf' },
+      fr: [
+        trainingBooking('littfeld-fr-herren70', 'littfeld', 'Herren 70', '15:00', '17:00', [1]),
+        trainingBooking('littfeld-fr-herren', 'littfeld', 'Herren 1 + 2, Herren 30, Herren 50', '17:00', '20:00', allCourts),
       ],
-      saturday: [
-        { id: 'l-sa-arno', title: 'Arno Trainingsgruppen', start: '09:00', end: '13:00', courts: ['P1'], certainty: 'high', source: 'pdf' },
-        { id: 'l-sa-sonja', title: 'Sonja Trainingsgruppen Kinder', start: '09:00', end: '13:00', courts: ['P2'], certainty: 'high', source: 'pdf' },
+      sa: [
+        trainingBooking('littfeld-sa-arno', 'littfeld', 'Arno Trainingsgruppen', '09:00', '13:00', [1]),
+        trainingBooking('littfeld-sa-sonja-kinder', 'littfeld', 'Sonja Trainingsgruppen Kinder', '09:00', '13:00', [2]),
       ],
     },
+    datedBookings: littfeldDatedEvents,
+    recurringBookings: littfeldRecurringEvents,
     suspendedWeeklyDates: ['2026-05-26'],
-    datedBookings: {
-      '2026-05-22': [{ id: 'l-20260522-cup', title: 'Kindelsberg Pfingstcup', start: '08:00', end: '22:00', courts: ALL_COURTS, certainty: 'high', source: 'screenshot' }],
-      '2026-05-23': [{ id: 'l-20260523-cup', title: 'Kindelsberg Pfingstcup', start: '08:00', end: '22:00', courts: ALL_COURTS, certainty: 'high', source: 'screenshot' }],
-      '2026-05-24': [{ id: 'l-20260524-cup', title: 'Kindelsberg Pfingstcup', start: '08:00', end: '22:00', courts: ALL_COURTS, certainty: 'high', source: 'screenshot' }],
-      '2026-05-25': [{ id: 'l-20260525-cup', title: 'Kindelsberg Pfingstcup', start: '08:00', end: '22:00', courts: ALL_COURTS, certainty: 'high', source: 'screenshot' }],
-      '2026-05-26': [
-        { id: 'l-20260526-niklas-colin', title: 'Vereinsmeisterschaft Doppel Niklas-Colin', start: '16:30', end: '17:30', courts: ['P1'], certainty: 'uncertain', source: 'screenshot', note: 'Platzanzahl angenommen' },
-        { id: 'l-20260526-viviane-frank', title: 'Vereinsmeisterschaft Doppel Viviane-Frank', start: '19:00', end: '20:30', courts: ['P1'], certainty: 'uncertain', source: 'screenshot', note: 'Platzanzahl angenommen' },
-      ],
-      '2026-05-29': [{ id: 'l-20260529-colin-patrick', title: 'VMS Colin vs Patrick', start: '17:00', end: '18:00', courts: ['P1'], certainty: 'uncertain', source: 'screenshot', note: 'Platzanzahl angenommen' }],
-      '2026-06-01': [{ id: 'l-20260601-till-niklas', title: 'VMs Till vs Niklas', start: '18:30', end: '20:30', courts: ['P1'], certainty: 'uncertain', source: 'screenshot', note: 'Platzanzahl angenommen' }],
-      '2026-06-03': [{ id: 'l-20260603-mixed', title: 'VMS Mixed Patrick & Agnes', start: '16:30', end: '18:30', courts: ['P1'], certainty: 'uncertain', source: 'screenshot', note: 'Platzanzahl angenommen' }],
-      '2026-06-14': [{ id: 'l-20260614-heim', title: 'HEIM TVL 2 vs. Bad Berleburg', start: '14:30', end: '18:30', courts: ALL_COURTS, certainty: 'high', source: 'screenshot' }],
-      '2026-06-21': [{ id: 'l-20260621-heim', title: 'HEIM TVL 2 vs. Unlinghausen', start: '14:30', end: '18:30', courts: ALL_COURTS, certainty: 'high', source: 'screenshot' }],
-      '2026-06-28': [{ id: 'l-20260628-heim-damen', title: 'HEIM TVL Damen 2 vs. Siegener SC', start: '09:00', end: '14:00', courts: ALL_COURTS, certainty: 'high', source: 'screenshot' }],
-      '2026-07-05': [{ id: 'l-20260705-heim', title: 'HEIM TVL 2 vs. Rönkhausen', start: '14:30', end: '18:30', courts: ALL_COURTS, certainty: 'high', source: 'screenshot' }],
-      '2026-07-25': [{ id: 'l-20260725-mixed', title: 'HEIM TVL Mixed 1 vs. Warstein', start: '13:00', end: '18:00', courts: ALL_COURTS, certainty: 'high', source: 'screenshot' }],
-      '2026-08-25': [{ id: 'l-20260825-camp', title: 'Tenniscamp', start: '08:00', end: '22:00', courts: ALL_COURTS, certainty: 'uncertain', source: 'screenshot', note: 'Vollbelegung angenommen' }],
-      '2026-08-26': [{ id: 'l-20260826-camp', title: 'Tenniscamp', start: '08:00', end: '22:00', courts: ALL_COURTS, certainty: 'uncertain', source: 'screenshot', note: 'Vollbelegung angenommen' }],
-      '2026-08-27': [{ id: 'l-20260827-camp', title: 'Tenniscamp', start: '08:00', end: '15:00', courts: ALL_COURTS, certainty: 'uncertain', source: 'screenshot', note: 'Vollbelegung angenommen' }],
-      '2026-09-05': [{ id: 'l-20260905-mixed', title: 'HEIM TVL Mixed 1 vs. Siegen', start: '13:00', end: '18:00', courts: ALL_COURTS, certainty: 'high', source: 'screenshot' }],
-    },
-    recurringBookings: [
-      { id: 'l-season-wed-herren', title: 'Gemeinsames Training Herren / 30 / 50', start: '18:00', end: '21:00', courts: ALL_COURTS, certainty: 'high', source: 'screenshot', from: '2026-05-27', to: '2026-10-16', dayKey: 'wednesday' },
-      { id: 'l-season-fri-herren', title: 'Gemeinsames Training Herren / 30 / 50', start: '17:00', end: '20:00', courts: ALL_COURTS, certainty: 'high', source: 'screenshot', from: '2026-05-27', to: '2026-10-16', dayKey: 'friday' },
-    ],
-    notice: 'Littfeld enthält zusätzlich Termine aus Screenshots. Trotzdem bitte vor dem Losfahren in der Kalender-/Team-App gegenprüfen.',
+    notice: 'Littfeld: Trainingsplan-Bild plus manuell übertragene Screenshot-Termine. Kurzfristige Änderungen bitte in der Team-App prüfen.',
   },
 };
 
 export const facilityIds: FacilityId[] = ['littfeld', 'hilchenbach'];
-export const courts: CourtId[] = ['P1', 'P2', 'P3'];
+export const courts: Court[] = allCourts;

@@ -15,11 +15,12 @@ function pluralizeCourt(count: number): string {
   return `${count} Plätze`;
 }
 
-function formatCourtList(courts: string[]): string {
+function formatCourtList(courts: number[]): string {
   if (courts.length === 0) return '';
-  if (courts.length === 1) return courts[0]!;
-  if (courts.length === 2) return courts.join(' und ');
-  return `${courts.slice(0, -1).join(', ')} und ${courts[courts.length - 1]}`;
+  const labels = courts.map((court) => `P${court}`);
+  if (labels.length === 1) return labels[0]!;
+  if (labels.length === 2) return labels.join(' und ');
+  return `${labels.slice(0, -1).join(', ')} und ${labels[labels.length - 1]}`;
 }
 
 export function createWhatsAppText({ result, date, time, duration, todayIso }: ShareMessageInput): string {

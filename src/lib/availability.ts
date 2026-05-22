@@ -1,10 +1,10 @@
-import { courts, facilities, facilityIds, type Booking, type CourtId, type FacilityId } from '../data/facilities';
+import { courts, facilities, facilityIds, type Booking, type Court, type FacilityId } from '../data/facilities';
 import { addDays, getDayKey, type DayKey } from './date';
 
-export type SelectedCourt = CourtId | 'egal';
+export type SelectedCourt = Court | 'egal';
 
 export type CourtResult = {
-  court: CourtId;
+  court: Court;
   free: boolean;
   blockers: Booking[];
   nextBooking?: Booking;
@@ -18,11 +18,12 @@ export type AvailabilityResult = {
   playable: boolean;
   invalid: boolean;
   reason?: string;
-  playableCourts: CourtId[];
-  occupiedCourts: CourtId[];
+  playableCourts: Court[];
+  occupiedCourts: Court[];
   courtResults: CourtResult[];
-  longestRun?: { court: CourtId; until: string; minutes: number };
+  longestRun?: { court: Court; until: string; minutes: number };
   bookings: Booking[];
+  hasAssumedBooking: boolean;
   hasUncertainBooking: boolean;
 };
 
@@ -31,7 +32,7 @@ export type Slot = {
   facilityName: string;
   date: string;
   time: string;
-  courts: CourtId[];
+  courts: Court[];
 };
 
 export function toMinutes(time: string): number {
@@ -49,36 +50,39 @@ export function overlaps(aStart: number, aEnd: number, bStart: number, bEnd: num
   return aStart < bEnd && bStart < aEnd;
 }
 
-function isWithinInclusive(date: string, from: string, to: string): boolean {
-  return date >= from && date <= to;
+function isWithinInclusive(date: string, from?: string, to?: string): boolean {
+  if (from && date < from) return false;
+  if (to && date > to) return false;
+  return true;
 }
 
 export function getBookingsForDate(facilityId: FacilityId, date: string, dayKey: DayKey = getDayKey(date)): Booking[] {
   const facility = facilities[facilityId];
   const weekly = facility.suspendedWeeklyDates?.includes(date) ? [] : (facility.weeklyBookings[dayKey] ?? []);
-  const dated = facility.datedBookings?.[date] ?? [];
-  const recurring =
-    facility.recurringBookings
-      ?.filter((booking) => booking.dayKey === dayKey && isWithinInclusive(date, booking.from, booking.to))
-      .map(({ from: _from, to: _to, dayKey: _dayKey, ...booking }) => booking) ?? [];
+  const dated = (facility.datedBookings ?? []).filter((booking) => booking.date === date);
+  const recurring = (facility.recurringBookings ?? []).filter(
+    (booking) =>
+      booking.recurring?.day === dayKey &&
+      isWithinInclusive(date, booking.recurring.startDate, booking.recurring.endDate),
+  );
 
   return [...weekly, ...dated, ...recurring].sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
 }
 
-function nextBookingForCourt(bookings: Booking[], court: CourtId, requestEnd: number): Booking | undefined {
+function nextBookingForCourt(bookings: Booking[], court: Court, requestEnd: number): Booking | undefined {
   return bookings
     .filter((booking) => booking.courts.includes(court) && toMinutes(booking.start) >= requestEnd)
     .sort((a, b) => toMinutes(a.start) - toMinutes(b.start))[0];
 }
 
-function freeUntilForCourt(bookings: Booking[], court: CourtId, requestStart: number): number {
+function freeUntilForCourt(bookings: Booking[], court: Court, requestStart: number): number {
   const next = bookings
     .filter((booking) => booking.courts.includes(court) && toMinutes(booking.start) >= requestStart)
     .sort((a, b) => toMinutes(a.start) - toMinutes(b.start))[0];
   return next ? toMinutes(next.start) : toMinutes('22:00');
 }
 
-function courtDetail(court: CourtId, blockers: Booking[], nextBooking: Booking | undefined, freeUntil: number): string {
+function courtDetail(court: Court, blockers: Booking[], nextBooking: Booking | undefined, freeUntil: number): string {
   if (blockers.length > 0) {
     return blockers.map((booking) => `Belegt durch ${booking.title} (${booking.start}-${booking.end})`).join('\n');
   }
@@ -126,6 +130,7 @@ export function analyzeAvailability(
   const longest = courtResults
     .filter((result) => result.free)
     .sort((a, b) => b.freeUntil - a.freeUntil)[0];
+  const hasAssumedBooking = bookings.some((booking) => booking.certainty === 'assumed-one-court' || booking.certainty === 'assumed-all-courts');
 
   return {
     facilityId,
@@ -138,7 +143,8 @@ export function analyzeAvailability(
     courtResults,
     longestRun: longest ? { court: longest.court, until: fromMinutes(longest.freeUntil), minutes: Math.max(0, longest.freeUntil - requestStart) } : undefined,
     bookings,
-    hasUncertainBooking: bookings.some((booking) => booking.certainty === 'uncertain'),
+    hasAssumedBooking,
+    hasUncertainBooking: hasAssumedBooking || bookings.some((booking) => booking.certainty === 'needs-check'),
   };
 }
 
