@@ -12,6 +12,13 @@ const START = toMinutes('08:00');
 const END = toMinutes('22:00');
 const ROW_HEIGHT = 30;
 const slots = Array.from({ length: (END - START) / 30 }, (_, index) => START + index * 30);
+type CalendarBlock = {
+  booking: Booking;
+  court: Court;
+  lane: number;
+  laneCount: number;
+  conflict: boolean;
+};
 
 function fromMinutes(minutes: number): string {
   const hours = Math.floor(minutes / 60);
@@ -29,20 +36,52 @@ function bookingColor(booking: Booking): string {
   return 'border-court-lime/30 bg-court-lime/16 text-white';
 }
 
-function bookingGridStyle(booking: Booking, court: Court): CSSProperties {
+function blocksOverlap(a: Booking, b: Booking): boolean {
+  return toMinutes(a.start) < toMinutes(b.end) && toMinutes(b.start) < toMinutes(a.end);
+}
+
+function createCalendarBlocks(bookings: Booking[]): CalendarBlock[] {
+  return courts.flatMap((court) => {
+    const courtBookings = bookings
+      .filter((booking) => booking.courts.includes(court))
+      .sort((a, b) => toMinutes(a.start) - toMinutes(b.start) || toMinutes(a.end) - toMinutes(b.end));
+
+    return courtBookings.map((booking) => {
+      const overlapping = courtBookings.filter((other) => other.id !== booking.id && blocksOverlap(booking, other));
+      const group = [booking, ...overlapping].sort((a, b) => toMinutes(a.start) - toMinutes(b.start) || a.id.localeCompare(b.id));
+      const lane = group.findIndex((item) => item.id === booking.id);
+
+      return {
+        booking,
+        court,
+        lane: Math.max(0, lane),
+        laneCount: Math.max(1, group.length),
+        conflict: overlapping.length > 0,
+      };
+    });
+  });
+}
+
+function bookingGridStyle(block: CalendarBlock): CSSProperties {
+  const { booking, court, lane, laneCount } = block;
   const start = Math.max(START, toMinutes(booking.start));
   const end = Math.min(END, toMinutes(booking.end));
   const startRow = Math.floor((start - START) / 30) + 2;
   const span = Math.max(1, Math.ceil((end - start) / 30));
+  const width = `${100 / laneCount}%`;
+  const left = `${(lane * 100) / laneCount}%`;
 
   return {
     gridColumn: court + 1,
     gridRow: `${startRow} / span ${span}`,
+    width,
+    marginLeft: left,
   };
 }
 
 export function DayCalendarView({ facilityId, date }: DayCalendarViewProps) {
   const bookings = getBookingsForDate(facilityId, date, getDayKey(date));
+  const calendarBlocks = createCalendarBlocks(bookings);
 
   return (
     <div className="rounded-lg border border-white/10 bg-black/20 p-3">
@@ -84,22 +123,24 @@ export function DayCalendarView({ facilityId, date }: DayCalendarViewProps) {
             )),
           )}
 
-          {bookings.flatMap((booking) =>
-            booking.courts.map((court) => (
+          {calendarBlocks.map((block) => {
+            const { booking, court } = block;
+            return (
               <button
                 key={`${booking.id}-${court}`}
                 type="button"
                 title={`${booking.title} (${booking.start}-${booking.end})`}
-                className={`z-10 m-0.5 overflow-hidden rounded-md border px-2 py-1 text-left leading-tight shadow-sm ${bookingColor(booking)}`}
-                style={bookingGridStyle(booking, court)}
+                className={`z-10 m-0.5 overflow-hidden rounded-md border px-1.5 py-1 text-left leading-tight shadow-sm ${bookingColor(booking)}`}
+                style={bookingGridStyle(block)}
               >
                 <span className="block text-[0.65rem] font-bold">
                   {booking.start}-{booking.end}
                 </span>
+                {block.conflict && <span className="mt-0.5 inline-block rounded bg-amber-200 px-1 text-[0.55rem] font-black uppercase text-court-950">Konflikt</span>}
                 <span className="mt-0.5 line-clamp-3 block text-[0.68rem] font-semibold">{booking.title}</span>
               </button>
-            )),
-          )}
+            );
+          })}
         </div>
       </div>
     </div>

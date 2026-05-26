@@ -33,7 +33,6 @@ export type Facility = {
   name: string;
   planHours: Partial<Record<DayKey, { start: string; end: string }>>;
   weeklyBookings: WeeklyBookings;
-  suspendedWeeklyDates?: string[];
   datedBookings?: Booking[];
   recurringBookings?: Booking[];
   notice: string;
@@ -133,7 +132,6 @@ export const facilities: Record<FacilityId, Facility> = {
     },
     datedBookings: littfeldDatedEvents,
     recurringBookings: littfeldRecurringEvents,
-    suspendedWeeklyDates: ['2026-05-26'],
     notice: 'Littfeld: Trainingsplan-Bild plus manuell übertragene Screenshot-Termine. Kurzfristige Änderungen bitte in der Team-App prüfen.',
   },
 };

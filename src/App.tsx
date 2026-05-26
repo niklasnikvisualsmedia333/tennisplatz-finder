@@ -367,7 +367,8 @@ function RecommendationCard({
 }
 
 function isWeekend(isoDate: string): boolean {
-  const day = new Date(`${isoDate}T12:00:00`).getDay();
+  const [year, month, date] = isoDate.split('-').map(Number);
+  const day = new Date(year ?? 0, (month ?? 1) - 1, date ?? 1).getDay();
   return day === 0 || day === 6;
 }
 

@@ -58,7 +58,7 @@ function isWithinInclusive(date: string, from?: string, to?: string): boolean {
 
 export function getBookingsForDate(facilityId: FacilityId, date: string, dayKey: DayKey = getDayKey(date)): Booking[] {
   const facility = facilities[facilityId];
-  const weekly = facility.suspendedWeeklyDates?.includes(date) ? [] : (facility.weeklyBookings[dayKey] ?? []);
+  const weekly = facility.weeklyBookings[dayKey] ?? [];
   const dated = (facility.datedBookings ?? []).filter((booking) => booking.date === date);
   const recurring = (facility.recurringBookings ?? []).filter(
     (booking) =>

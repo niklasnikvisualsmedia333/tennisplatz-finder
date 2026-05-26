@@ -11,6 +11,10 @@ function result(facilityId: 'hilchenbach' | 'littfeld', date: string, time: stri
   return analyzeAvailability(facilityId, date, getDayKey(date), time, duration, 'egal');
 }
 
+function bookingTitles(bookings: Array<{ title: string }>): string[] {
+  return bookings.map((booking) => booking.title);
+}
+
 describe('availability logic', () => {
   it('converts 18:30 to 1110 minutes', () => {
     expect(toMinutes('18:30')).toBe(1110);
@@ -140,10 +144,10 @@ describe('availability logic', () => {
     expect(result('littfeld', '2026-05-23', '14:00').playableCourts).toHaveLength(0);
   });
 
-  it('blocks one assumed VMS court and leaves two playable courts on 2026-05-26', () => {
+  it('merges VMS with regular Tuesday training on 2026-05-26', () => {
     const availability = result('littfeld', '2026-05-26', '16:30');
-    expectCourts(availability.occupiedCourts, [1]);
-    expectCourts(availability.playableCourts, [2, 3]);
+    expectCourts(availability.occupiedCourts, [1, 3]);
+    expectCourts(availability.playableCourts, [2]);
   });
 
   it('blocks all courts for Littfeld home match against Bad Berleburg', () => {
@@ -183,6 +187,55 @@ describe('availability logic', () => {
 
   it('blocks recurring Friday Herren training on 2026-10-16', () => {
     expect(result('littfeld', '2026-10-16', '17:30').playableCourts).toHaveLength(0);
+  });
+
+  it('merges regular Tuesday training and VMS bookings for Littfeld on 2026-05-26', () => {
+    const bookings = getBookingsForDate('littfeld', '2026-05-26');
+    const titles = bookingTitles(bookings);
+
+    expect(bookings.length).toBeGreaterThanOrEqual(7);
+    expect(titles).toContain('Chiara Trainingsgruppen Kinder');
+    expect(titles).toContain('Sonja Trainingsgruppen Kinder');
+    expect(titles).toContain('Chiara / Jule mit Jürgen Bree');
+    expect(titles.filter((title) => title === 'Damen 40 mit Jürgen Bree')).toHaveLength(2);
+    expect(titles).toContain('Vereinsmeisterschaftsdoppel Niklas-Colin');
+    expect(titles).toContain('Vereinsmeisterschaftsdoppel Viviane-Frank');
+  });
+
+  it('keeps exact merged Littfeld Tuesday booking intervals on 2026-05-26', () => {
+    const bookings = getBookingsForDate('littfeld', '2026-05-26').map((booking) => ({
+      title: booking.title,
+      start: booking.start,
+      end: booking.end,
+      courts: booking.courts,
+    }));
+
+    expect(bookings).toContainEqual({ title: 'Chiara Trainingsgruppen Kinder', start: '14:00', end: '18:00', courts: [1] });
+    expect(bookings).toContainEqual({ title: 'Sonja Trainingsgruppen Kinder', start: '14:00', end: '18:00', courts: [3] });
+    expect(bookings).toContainEqual({ title: 'Chiara / Jule mit Jürgen Bree', start: '18:00', end: '19:30', courts: [3] });
+    expect(bookings).toContainEqual({ title: 'Damen 40 mit Jürgen Bree', start: '19:00', end: '20:30', courts: [1, 2] });
+    expect(bookings).toContainEqual({ title: 'Damen 40 mit Jürgen Bree', start: '19:30', end: '20:30', courts: [3] });
+    expect(bookings).toContainEqual({ title: 'Vereinsmeisterschaftsdoppel Niklas-Colin', start: '16:30', end: '17:30', courts: [1] });
+    expect(bookings).toContainEqual({ title: 'Vereinsmeisterschaftsdoppel Viviane-Frank', start: '19:00', end: '20:30', courts: [1] });
+  });
+
+  it('merges regular Wednesday training, VMS and recurring Herren training on 2026-06-03', () => {
+    const bookings = getBookingsForDate('littfeld', '2026-06-03');
+    const titles = bookingTitles(bookings);
+
+    expect(titles).toContain('Chiara Trainingsgruppen Kinder');
+    expect(titles).toContain('Michael Trainingsgruppen Kinder');
+    expect(titles.filter((title) => title === 'Herren 1 + 2, Herren 30, Herren 50')).toHaveLength(2);
+    expect(titles).toContain('VMS Mixed Patrick & Agnes');
+    expect(titles).toContain('Gemeinsames Training Herren / 30 / 50');
+  });
+
+  it('includes recurring Wednesday Gemeinsames Training on 2026-10-14', () => {
+    expect(bookingTitles(getBookingsForDate('littfeld', '2026-10-14'))).toContain('Gemeinsames Training Herren / 30 / 50');
+  });
+
+  it('includes recurring Friday Gemeinsames Training on 2026-10-16', () => {
+    expect(bookingTitles(getBookingsForDate('littfeld', '2026-10-16'))).toContain('Gemeinsames Training Herren / 30 / 50');
   });
 
   it('marks 21:30 + 60 minutes invalid', () => {

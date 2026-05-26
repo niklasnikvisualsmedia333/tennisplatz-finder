@@ -2,6 +2,11 @@ export type DayKey = 'mo' | 'di' | 'mi' | 'do' | 'fr' | 'sa' | 'so';
 
 const DAY_KEYS: DayKey[] = ['so', 'mo', 'di', 'mi', 'do', 'fr', 'sa'];
 
+function parseIsoDateLocal(isoDate: string): Date {
+  const [year, month, day] = isoDate.split('-').map(Number);
+  return new Date(year ?? 0, (month ?? 1) - 1, day ?? 1);
+}
+
 export function toIsoDate(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
@@ -10,13 +15,13 @@ export function toIsoDate(date: Date): string {
 }
 
 export function addDays(isoDate: string, days: number): string {
-  const date = new Date(`${isoDate}T12:00:00`);
+  const date = parseIsoDateLocal(isoDate);
   date.setDate(date.getDate() + days);
   return toIsoDate(date);
 }
 
 export function getDayKey(isoDate: string): DayKey {
-  return DAY_KEYS[new Date(`${isoDate}T12:00:00`).getDay()]!;
+  return DAY_KEYS[parseIsoDateLocal(isoDate).getDay()]!;
 }
 
 export function formatDisplayDate(isoDate: string): string {
@@ -24,7 +29,7 @@ export function formatDisplayDate(isoDate: string): string {
     weekday: 'short',
     day: '2-digit',
     month: '2-digit',
-  }).format(new Date(`${isoDate}T12:00:00`));
+  }).format(parseIsoDateLocal(isoDate));
 }
 
 export function formatRelativeDay(isoDate: string, todayIso = toIsoDate(new Date())): string {
@@ -35,5 +40,5 @@ export function formatRelativeDay(isoDate: string, todayIso = toIsoDate(new Date
     weekday: 'long',
     day: '2-digit',
     month: '2-digit',
-  }).format(new Date(`${isoDate}T12:00:00`));
+  }).format(parseIsoDateLocal(isoDate));
 }

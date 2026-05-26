@@ -24,10 +24,10 @@ describe('share message', () => {
     const result = analyzeAvailability('littfeld', '2026-05-26', getDayKey('2026-05-26'), '16:30', 60, 'egal');
     const text = createWhatsAppText({ result, date: '2026-05-26', time: '16:30', duration: 60, todayIso: '2026-05-21' });
 
-    expect(text).toContain('2 Plätze frei');
-    expect(text).toContain('P2 und P3');
+    expect(text).toContain('ein Platz frei');
+    expect(text).toContain('P2');
     expect(text).toContain('von 16:30 bis 17:30');
-    expect(text).toContain('sogar bis 22:00');
+    expect(text).toContain('sogar bis 19:00');
     expect(text).not.toContain('Wer hätte Lust');
     expect(text).not.toContain('Hey');
   });
