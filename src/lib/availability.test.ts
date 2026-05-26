@@ -64,8 +64,16 @@ describe('availability logic', () => {
     expectCourts(result('hilchenbach', '2026-05-29', '16:00', 90).playableCourts, [1, 2, 3]);
   });
 
+  it('leaves only P2 playable in Littfeld Monday 14:30 for 60 minutes', () => {
+    expectCourts(result('littfeld', '2026-06-01', '14:30').playableCourts, [2]);
+  });
+
   it('blocks all Littfeld courts Monday 17:30 for 60 minutes', () => {
     expect(result('littfeld', '2026-06-01', '17:30').playableCourts).toHaveLength(0);
+  });
+
+  it('leaves only P3 playable in Littfeld Monday 20:00 for 60 minutes', () => {
+    expectCourts(result('littfeld', '2026-06-01', '20:00').playableCourts, [3]);
   });
 
   it('leaves P1 and P2 playable in Littfeld Tuesday 18:00 for 60 minutes', () => {
@@ -76,8 +84,20 @@ describe('availability logic', () => {
     expect(result('littfeld', '2026-06-02', '19:00').playableCourts).toHaveLength(0);
   });
 
+  it('frees all Littfeld courts Tuesday 20:30 for 60 minutes', () => {
+    expectCourts(result('littfeld', '2026-06-02', '20:30').playableCourts, [1, 2, 3]);
+  });
+
   it('blocks all Littfeld courts Wednesday 18:00 for 60 minutes', () => {
     expect(result('littfeld', '2026-06-10', '18:00').playableCourts).toHaveLength(0);
+  });
+
+  it('frees all Littfeld courts Wednesday 20:30 for 60 minutes', () => {
+    expectCourts(result('littfeld', '2026-05-20', '20:30').playableCourts, [1, 2, 3]);
+  });
+
+  it('blocks all Littfeld courts Thursday 18:30 for 60 minutes', () => {
+    expect(result('littfeld', '2026-06-04', '18:30').playableCourts).toHaveLength(0);
   });
 
   it('blocks all Littfeld courts Thursday 20:00 for 60 minutes', () => {
@@ -88,6 +108,10 @@ describe('availability logic', () => {
     expectCourts(result('littfeld', '2026-06-04', '20:30').playableCourts, [1, 3]);
   });
 
+  it('frees all Littfeld courts Thursday 21:00 for 60 minutes', () => {
+    expectCourts(result('littfeld', '2026-06-04', '21:00').playableCourts, [1, 2, 3]);
+  });
+
   it('leaves P2 and P3 playable in Littfeld Friday 16:00 for 60 minutes', () => {
     expectCourts(result('littfeld', '2026-06-05', '16:00').playableCourts, [2, 3]);
   });
@@ -96,8 +120,20 @@ describe('availability logic', () => {
     expect(result('littfeld', '2026-06-05', '17:00').playableCourts).toHaveLength(0);
   });
 
+  it('frees all Littfeld courts Friday 20:00 for 60 minutes', () => {
+    expectCourts(result('littfeld', '2026-06-12', '20:00').playableCourts, [1, 2, 3]);
+  });
+
   it('leaves only P3 playable in Littfeld Saturday 10:00 for 60 minutes', () => {
     expectCourts(result('littfeld', '2026-06-06', '10:00').playableCourts, [3]);
+  });
+
+  it('frees all Littfeld courts Saturday 13:00 for 60 minutes', () => {
+    expectCourts(result('littfeld', '2026-06-06', '13:00').playableCourts, [1, 2, 3]);
+  });
+
+  it('frees all Littfeld courts Sunday 15:00 for 60 minutes when no dated event blocks it', () => {
+    expectCourts(result('littfeld', '2026-06-07', '15:00').playableCourts, [1, 2, 3]);
   });
 
   it('blocks all courts for Littfeld Kindelsberg Cup', () => {
@@ -131,6 +167,14 @@ describe('availability logic', () => {
 
   it('blocks all courts for Littfeld home mixed match against Siegen', () => {
     expect(result('littfeld', '2026-09-05', '14:00').playableCourts).toHaveLength(0);
+  });
+
+  it('blocks recurring Wednesday Herren training on 2026-05-27', () => {
+    expect(result('littfeld', '2026-05-27', '18:30').playableCourts).toHaveLength(0);
+  });
+
+  it('blocks recurring Friday Herren training on 2026-06-05', () => {
+    expect(result('littfeld', '2026-06-05', '17:30').playableCourts).toHaveLength(0);
   });
 
   it('blocks recurring Wednesday Herren training on 2026-10-14', () => {
@@ -184,6 +228,15 @@ describe('availability logic', () => {
       expect(toMinutes(booking.start)).toBeLessThan(toMinutes(booking.end));
       expect(booking.source).not.toBe('PDF');
       expect(booking.source).not.toBe('pdf');
+    });
+  });
+
+  it('marks every weekly training-plan booking as training-plan-image with a title', () => {
+    const weeklyBookings = facilityIds.flatMap((facilityId) => Object.values(facilities[facilityId].weeklyBookings).flat());
+
+    weeklyBookings.forEach((booking) => {
+      expect(booking.source).toBe('training-plan-image');
+      expect(booking.title.trim()).not.toBe('');
     });
   });
 

@@ -18,7 +18,7 @@ export function SourceDocuments() {
                 rel="noreferrer"
                 className="focus-ring rounded-lg border border-court-lime/40 px-3 py-2 text-xs font-bold text-court-lime"
               >
-                Bild öffnen
+                {document.title} öffnen
               </a>
             </div>
             {document.note && <p className="mt-2 text-xs leading-relaxed text-amber-100">{document.note}</p>}
